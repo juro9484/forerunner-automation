@@ -203,5 +203,71 @@ cython_debug/
 
 # Marimo
 marimo/_static/
+
+# ===== CRITICAL - CREDENTIALS =====
+.env
+*.env
+.env.local
+.env.production
+.env.*.local
+credentials.json
+secrets.txt
+config.ini
+
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+.venv/
+env/
+ENV/
+build/
+dist/
+*.egg-info/
+
+# ===== Logs =====
+*.log
+logs/
+*.log.*
+
+# ===== IDEs =====
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ===== OS =====
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ===== Browser Drivers =====
+chromedriver
+chromedriver.exe
+geckodriver
+geckodriver.exe
+*.crx
+
+# ===== Testing =====
+.pytest_cache/
+.coverage
+htmlcov/
+
+# ===== Sensitive Business Files =====
+client_data/
+backups/
+screenshots/
+*.xlsx
+*.pdf
+*.docx
+
+# ===== Local Testing =====
+test_emails/
+sandbox/
+scratch/
 marimo/_lsp/
 __marimo__/
