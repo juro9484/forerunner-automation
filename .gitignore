@@ -271,3 +271,7 @@ sandbox/
 scratch/
 marimo/_lsp/
 __marimo__/
+
+# Database and data files
+data/
+*.db
