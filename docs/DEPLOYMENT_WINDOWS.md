@@ -114,9 +114,152 @@ python tests\test_email_monitor.py
 
 ---
 
-## Step 6: Start Continuous Monitoring
+## Step 6: Install as Windows Service (RECOMMENDED)
 
-### Option A: Run in Command Prompt Window
+Running as a service is the best approach for production:
+- ✅ Runs 24/7 automatically
+- ✅ Starts on boot
+- ✅ Restarts if crashes
+- ✅ No user login needed
+
+### Download and Install NSSM
+
+**NSSM = "Non-Sucking Service Manager"** - Makes any program run as a Windows service
+
+1. **Download NSSM:**
+   - Go to: https://nssm.cc/download
+   - Download latest version (2.24 or newer)
+   - Extract the ZIP file
+
+2. **Copy to permanent location:**
+   ```cmd
+   mkdir C:\nssm
+   ```
+   - Copy `win64\nssm.exe` to `C:\nssm\`
+
+3. **Add to PATH (optional but convenient):**
+   - Search "Environment Variables" in Start menu
+   - Click "Environment Variables"
+   - Under "System variables", find "Path"
+   - Click "Edit" → "New"
+   - Add: `C:\nssm`
+   - Click OK on all dialogs
+
+---
+
+### Install Email Monitor as Service
+
+Open **Command Prompt as Administrator**:
+
+```cmd
+cd C:\nssm
+nssm install ForerunnerEmailMonitor
+```
+
+A configuration window opens. Fill in:
+
+**Application Tab:**
+- **Path:**
+  ```
+  C:\Python311\python.exe
+  ```
+  (Find your Python path: `where python`)
+
+- **Startup directory:**
+  ```
+  C:\Users\YourUsername\Desktop\forerunner-automation
+  ```
+
+- **Arguments:**
+  ```
+  monitor_daemon.py
+  ```
+
+**Details Tab:**
+- **Display name:** `Forerunner Email Monitor`
+- **Description:** `Monitors email for insurance claim numbers`
+- **Startup type:** `Automatic`
+
+**I/O Tab:**
+- **Output (stdout):**
+  ```
+  C:\Users\YourUsername\Desktop\forerunner-automation\logs\service_output.log
+  ```
+- **Error (stderr):**
+  ```
+  C:\Users\YourUsername\Desktop\forerunner-automation\logs\service_error.log
+  ```
+
+**Exit actions Tab:**
+- **Restart:** Select "Restart application"
+- **Delay restart by:** `10000` milliseconds (10 seconds)
+
+Click **"Install service"**
+
+---
+
+### Start the Service
+
+```cmd
+nssm start ForerunnerEmailMonitor
+```
+
+**Or use Windows Services:**
+1. Press `Win+R`, type `services.msc`, press Enter
+2. Find "Forerunner Email Monitor"
+3. Right-click → Start
+
+---
+
+### Verify It's Running
+
+**Check service status:**
+```cmd
+nssm status ForerunnerEmailMonitor
+```
+
+Should show: `SERVICE_RUNNING`
+
+**Check logs:**
+```cmd
+type logs\monitor_daemon.log
+```
+
+Should see:
+```
+Email Monitor Daemon Starting
+Monitoring: support@forerunnerclaims.com
+```
+
+---
+
+### Service Management Commands
+
+```cmd
+# Check status
+nssm status ForerunnerEmailMonitor
+
+# Start
+nssm start ForerunnerEmailMonitor
+
+# Stop
+nssm stop ForerunnerEmailMonitor
+
+# Restart (after updates)
+nssm restart ForerunnerEmailMonitor
+
+# Edit configuration
+nssm edit ForerunnerEmailMonitor
+
+# Remove service
+nssm remove ForerunnerEmailMonitor confirm
+```
+
+---
+
+### Alternative: Run in Terminal (Testing Only)
+
+For testing before setting up service:
 
 ```cmd
 python monitor_daemon.py
@@ -124,53 +267,7 @@ python monitor_daemon.py
 
 **To stop:** Press `Ctrl+C`
 
-**Logs:** Check `logs\monitor_daemon.log`
-
----
-
-### Option B: Run as Background Task (Windows Task Scheduler)
-
-**Create a scheduled task to run at startup:**
-
-1. Open **Task Scheduler** (search in Start menu)
-2. Click **"Create Basic Task"**
-3. Name: `Forerunner Email Monitor`
-4. Trigger: **"When the computer starts"**
-5. Action: **"Start a program"**
-6. Program/script:
-   ```
-   python
-   ```
-7. Add arguments:
-   ```
-   C:\Users\YourUsername\Desktop\forerunner-automation\monitor_daemon.py
-   ```
-8. Start in:
-   ```
-   C:\Users\YourUsername\Desktop\forerunner-automation
-   ```
-9. Check **"Run whether user is logged on or not"**
-10. Click **Finish**
-
----
-
-### Option C: Run Hidden in Background (Best for ZBook)
-
-Create a batch file to run hidden:
-
-**Create `start_monitor.bat`:**
-```batch
-@echo off
-cd /d C:\Users\YourUsername\Desktop\forerunner-automation
-pythonw monitor_daemon.py
-```
-
-**Double-click to start** (no window appears)
-
-**To stop:**
-```cmd
-taskkill /F /IM pythonw.exe
-```
+**But for production, use the service!**
 
 ---
 
