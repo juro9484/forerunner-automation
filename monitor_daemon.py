@@ -15,6 +15,7 @@ from datetime import datetime
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
 from email_monitor import EmailMonitor, EmailMonitorError
+from summarizer import EmailSummarizer, SummarizerError
 from config import Config
 
 # Configure logging
@@ -49,17 +50,28 @@ def main():
     signal.signal(signal.SIGTERM, signal_handler)  # kill command
 
     logger.info("=" * 80)
-    logger.info("Email Monitor Daemon Starting")
+    logger.info("Forerunner Claims Automation - Email Monitor Daemon")
     logger.info("=" * 80)
     logger.info(f"Monitoring: {Config.BOT_EMAIL_USER}")
     logger.info(f"Check interval: {Config.EMAIL_CHECK_INTERVAL} seconds")
     logger.info(f"Claim pattern: {Config.CLAIM_NUMBER_PATTERN}")
     logger.info(f"OAuth enabled: {Config.USE_OAUTH}")
+    logger.info(f"AI Provider: {Config.AI_PROVIDER}")
+    logger.info(f"AI Summarization: ENABLED")
     logger.info("=" * 80)
     logger.info("Press Ctrl+C to stop\n")
 
     check_count = 0
     total_emails_processed = 0
+
+    # Initialize summarizer once
+    try:
+        summarizer = EmailSummarizer()
+        logger.info("✓ AI Summarizer initialized successfully\n")
+    except Exception as e:
+        logger.error(f"✗ Failed to initialize summarizer: {e}")
+        logger.error("Cannot continue without summarizer. Check your ANTHROPIC_API_KEY in .env")
+        return
 
     while running:
         check_count += 1
@@ -79,17 +91,40 @@ def main():
                         logger.info(f"  Subject: {email_data.subject}")
                         logger.info(f"  Content preview: {email_data.email_content[:100]}...")
 
-                        # In MVP: Just log and mark as processed
-                        # TODO: Add AI summarization and Claim Titan posting here
+                        # Generate AI summary
+                        try:
+                            logger.info(f"  Generating AI summary...")
+                            summary = summarizer.summarize_email(email_data)
 
-                        # Mark as processed in database
-                        monitor.mark_email_processed(email_data, status="success")
+                            # Log the summary in CRM format
+                            logger.info(f"\n  " + "="*70)
+                            logger.info(f"  CLAIM TITAN NOTE - Claim #{email_data.claim_number}")
+                            logger.info(f"  " + "="*70)
+                            for line in summarizer.format_for_crm(summary).split('\n'):
+                                logger.info(f"  {line}")
+                            logger.info(f"  " + "="*70)
+                            logger.info(f"  Model: {summary.model_used}")
+                            logger.info(f"  Generated: {summary.timestamp.strftime('%Y-%m-%d %H:%M:%S')}")
+                            logger.info(f"  " + "="*70 + "\n")
 
-                        # Mark as read in email (only after success)
-                        monitor.mark_as_read(email_data.email_id)
+                            # Mark as processed in database
+                            monitor.mark_email_processed(email_data, status="success")
 
-                        total_emails_processed += 1
-                        logger.info(f"  ✓ Processed successfully")
+                            # Mark as read in email (only after success)
+                            monitor.mark_as_read(email_data.email_id)
+
+                            total_emails_processed += 1
+                            logger.info(f"  ✓ Processed successfully")
+
+                        except SummarizerError as e:
+                            logger.error(f"  ✗ Summarization failed: {e}")
+                            monitor.mark_email_processed(email_data, status="failed", error_message=str(e))
+                            logger.info(f"  Email marked as failed in database")
+
+                        except Exception as e:
+                            logger.error(f"  ✗ Unexpected error during processing: {e}", exc_info=True)
+                            monitor.mark_email_processed(email_data, status="failed", error_message=str(e))
+                            logger.info(f"  Email marked as failed in database")
 
                 else:
                     logger.info("No new emails with claim numbers")

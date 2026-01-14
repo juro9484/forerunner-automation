@@ -8,7 +8,7 @@ html2text==2020.1.16
 
 # AI APIs
 openai==1.6.1
-anthropic==0.8.1
+anthropic==0.76.0
 
 # Configuration & Environment
 python-dotenv==1.0.0

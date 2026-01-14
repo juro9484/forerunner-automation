@@ -47,8 +47,10 @@ class Config:
     BROWSER_HEADLESS: bool = os.getenv("BROWSER_HEADLESS", "true").lower() == "true"
 
     # Email Processing Configuration
-    # Matches: #12345, #12-345, 12345, 12-345 (keeps hyphens)
-    CLAIM_NUMBER_PATTERN: str = r"#?(\d{2,3}-?\d{3,4})"
+    # Matches: #12345, 12-345, CACHO-8192398023, 75-79F3-75F, etc.
+    # Very permissive pattern: any uppercase alphanumeric 5+ chars with optional hyphens
+    # Case-insensitive to handle lowercase in emails (will be normalized to uppercase)
+    CLAIM_NUMBER_PATTERN: str = r"(?i)#?([A-Z0-9-]{5,})"
     EMAIL_CHECK_INTERVAL: int = 300  # 5 minutes in seconds
     MAX_RETRIES: int = int(os.getenv("MAX_RETRIES", "3"))
 

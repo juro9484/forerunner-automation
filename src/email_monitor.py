@@ -190,11 +190,12 @@ class EmailMonitor:
             subject: Email subject line
 
         Returns:
-            Claim number if found, None otherwise
+            Claim number if found (normalized to uppercase), None otherwise
         """
         match = self.claim_pattern.search(subject)
         if match:
-            claim_number = match.group(1)
+            # Normalize to uppercase for consistency
+            claim_number = match.group(1).upper()
             self.logger.debug(f"Extracted claim number: {claim_number}")
             return claim_number
         return None
