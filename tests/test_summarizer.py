@@ -54,6 +54,7 @@ def test_with_sample_email():
         Forerunner Claims
         """,
         sender="beau@forerunnerclaims.com",
+        recipient="sly@statefarm.com",
         subject="Re: Claim 23-456 - Follow up on pending response",
         timestamp=datetime(2025, 9, 12, 10, 30),
         email_id="msg_001"
@@ -129,6 +130,7 @@ def test_with_detailed_email():
         Dorothy
         """,
         sender="dorothy@email.com",
+        recipient="beau@forerunnerclaims.com",
         subject="Re: Claim 24-789 - Payment questions",
         timestamp=datetime(2025, 10, 27, 15, 20),
         email_id="msg_002"

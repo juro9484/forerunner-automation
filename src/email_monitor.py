@@ -28,7 +28,8 @@ class EmailData:
     Attributes:
         claim_number: Extracted claim number from subject line
         email_content: Parsed email body content (plain text)
-        sender: Email address of sender
+        sender: Email address of sender (From field)
+        recipient: Email address of recipient (To field)
         subject: Original email subject
         timestamp: When the email was received
         email_id: Unique identifier for the email message
@@ -37,6 +38,7 @@ class EmailData:
     claim_number: str
     email_content: str
     sender: str
+    recipient: str
     subject: str
     timestamp: datetime
     email_id: str
@@ -278,6 +280,7 @@ class EmailMonitor:
             # Extract and decode headers
             subject = self._decode_header_value(message.get("Subject", ""))
             sender = self._decode_header_value(message.get("From", ""))
+            recipient = self._decode_header_value(message.get("To", ""))
             date_str = message.get("Date", "")
 
             # Parse timestamp
@@ -300,6 +303,7 @@ class EmailMonitor:
                 claim_number=claim_number,
                 email_content=email_content,
                 sender=sender,
+                recipient=recipient,
                 subject=subject,
                 timestamp=timestamp,
                 email_id=email_id,

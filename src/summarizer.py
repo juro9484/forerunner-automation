@@ -70,12 +70,14 @@ Each note consists of two parts:
      * "10.27.25 Dorothy replied to Beau email"
 
 2. **DESCRIPTION** - A concise third-person past-tense summary including:
+   - Start with who contacted whom (e.g., "Beau contacted State Farm letting them know...", "Dorothy replied to Beau regarding...")
    - What documents were sent/requested
    - Key dates, amounts, and deadlines mentioned
    - Legal references or policy numbers if cited
    - Specific questions asked or requests made
    - Important context or concerns raised
    - NO generic pleasantries or fluff - only critical facts
+   - Use the From/To email fields to identify sender and recipient accurately
 
 Writing style:
 - Third person past tense (e.g., "Beau sent", "Dorothy asked")
@@ -201,6 +203,7 @@ Format your response as JSON:
 
 **Claim Number:** {email_data.claim_number}
 **From:** {email_data.sender}
+**To:** {email_data.recipient}
 **Subject:** {email_data.subject}
 **Date:** {email_data.timestamp.strftime('%Y-%m-%d %H:%M:%S')}
 
@@ -209,7 +212,7 @@ Format your response as JSON:
 
 ---
 
-Please provide a summary in the JSON format specified."""
+Please provide a summary in the JSON format specified. Use the From/To fields to understand who is communicating with whom and create an accurate title and description."""
 
         return prompt
 
@@ -323,6 +326,7 @@ def main():
         Forerunner Claims
         """,
         sender="beau@forerunnerclaims.com",
+        recipient="lynn@statefarm.com",
         subject="Re: Claim 12-345 - Follow up on submitted documentation",
         timestamp=datetime(2025, 9, 8, 14, 30),
         email_id="test123"
