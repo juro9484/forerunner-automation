@@ -350,9 +350,14 @@ class ClaimTitanBot:
 
         try:
             # Find the claim number on the page
-            # Look for the container that has "Claim Number" label, then get the value below it
-            claim_container = self.page.locator('div:has(p:has-text("Claim Number"))')
-            claim_number_element = claim_container.locator('p.text-grey.font-500.text-sm')
+            # Find the "Claim Number" label, then get its parent container, then find the value element
+            claim_label = self.page.locator('p.text-grey-light.text-xs:has-text("Claim Number")')
+
+            # Get the parent flex container
+            flex_container = claim_label.locator('xpath=..')
+
+            # Within that specific container, get the second <p> element (the value, not the label)
+            claim_number_element = flex_container.locator('p.text-grey.font-500').first
 
             if not claim_number_element.is_visible():
                 raise PostError("Cannot verify claim number - element not found on page")
