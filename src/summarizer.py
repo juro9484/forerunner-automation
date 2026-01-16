@@ -252,7 +252,15 @@ Please provide a summary in the JSON format specified. Use the From/To fields to
                 json_str = content.strip()
 
             # Parse the JSON
-            summary_data = json.loads(json_str)
+            try:
+                summary_data = json.loads(json_str)
+            except json.JSONDecodeError as e:
+                # Try cleaning control characters and parsing again
+                self.logger.warning(f"Initial JSON parse failed, attempting to clean control characters...")
+                import re
+                # Remove control characters except newline, tab, carriage return
+                json_str_cleaned = re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]', '', json_str)
+                summary_data = json.loads(json_str_cleaned)
 
             # Validate required fields
             required_fields = ["title", "description"]
@@ -264,7 +272,8 @@ Please provide a summary in the JSON format specified. Use the From/To fields to
 
         except json.JSONDecodeError as e:
             self.logger.error(f"Failed to parse JSON response: {e}")
-            self.logger.debug(f"Response content: {content}")
+            self.logger.error(f"Raw response content (first 500 chars): {content[:500]}")
+            self.logger.error(f"Extracted JSON string (first 500 chars): {json_str[:500]}")
             raise SummarizerError(f"Could not parse AI response as JSON: {e}")
 
         except Exception as e:
