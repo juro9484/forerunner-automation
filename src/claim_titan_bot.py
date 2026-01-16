@@ -399,8 +399,8 @@ class ClaimTitanBot:
             new_note_button.click()
             self.logger.info("Clicked New Note button")
 
-            # Wait for form to appear
-            self.page.wait_for_selector('input[name="title"]', state='visible')
+            # Wait for note form to appear (scope to the notes form specifically)
+            self.page.wait_for_selector('form[action*="/notes"] input[name="title"]', state='visible')
 
             self.logger.info("✓ Notes form opened")
 
@@ -421,14 +421,17 @@ class ClaimTitanBot:
         self.logger.info("Filling note form...")
 
         try:
-            # Fill fields
-            self.page.locator('input[name="title"]').fill(title)
-            self.page.locator('textarea[name="description"]').fill(description)
+            # Get the notes form specifically (not expense or other forms)
+            notes_form = self.page.locator('form[action*="/notes"]')
+
+            # Fill fields within the notes form
+            notes_form.locator('input[name="title"]').fill(title)
+            notes_form.locator('textarea[name="description"]').fill(description)
 
             self.logger.info("Submitting note...")
 
-            # Submit
-            self.page.locator('button[type="submit"].is-primary').click()
+            # Submit the form
+            notes_form.locator('button[type="submit"].is-primary').click()
 
             # Wait for submission to complete
             self.page.wait_for_load_state('networkidle')
