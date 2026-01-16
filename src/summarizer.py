@@ -86,6 +86,12 @@ Writing style:
 - Professional insurance industry terminology
 - Focus on facts and actions, not opinions
 
+**CRITICAL FORMATTING RULES:**
+- Format the ENTIRE description as a SINGLE FLOWING PARAGRAPH
+- DO NOT use literal line breaks, newlines, or bullet points within the description
+- Use inline numbered items like "1) first item, 2) second item, 3) third item" or semicolons to separate multiple points
+- Keep all text in one continuous paragraph for proper JSON formatting
+
 Format your response as JSON:
 {
     "title": "Date [Person] [action] [to/from] [recipient]",
