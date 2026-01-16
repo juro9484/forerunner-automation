@@ -16,6 +16,7 @@ sys.path.insert(0, str(Path(__file__).parent / "src"))
 
 from email_monitor import EmailMonitor, EmailMonitorError
 from summarizer import EmailSummarizer, SummarizerError
+from claim_titan_bot import ClaimTitanBot, ClaimTitanError
 from config import Config
 
 # Configure logging
@@ -32,13 +33,22 @@ logger = logging.getLogger(__name__)
 
 # Global flag for graceful shutdown
 running = True
+claim_titan_bot = None
 
 
 def signal_handler(signum, frame):
     """Handle shutdown signals gracefully."""
-    global running
+    global running, claim_titan_bot
     logger.info("Shutdown signal received. Stopping monitor...")
     running = False
+
+    # Cleanup bot if running
+    if claim_titan_bot:
+        try:
+            claim_titan_bot.disconnect()
+            logger.info("✓ Claim Titan bot disconnected")
+        except Exception as e:
+            logger.warning(f"Error disconnecting bot: {e}")
 
 
 def main():
@@ -58,6 +68,7 @@ def main():
     logger.info(f"OAuth enabled: {Config.USE_OAUTH}")
     logger.info(f"AI Provider: {Config.AI_PROVIDER}")
     logger.info(f"AI Summarization: ENABLED")
+    logger.info(f"CRM Integration: Claim Titan (ENABLED)")
     logger.info("=" * 80)
     logger.info("Press Ctrl+C to stop\n")
 
@@ -67,11 +78,24 @@ def main():
     # Initialize summarizer once
     try:
         summarizer = EmailSummarizer()
-        logger.info("✓ AI Summarizer initialized successfully\n")
+        logger.info("✓ AI Summarizer initialized successfully")
     except Exception as e:
         logger.error(f"✗ Failed to initialize summarizer: {e}")
         logger.error("Cannot continue without summarizer. Check your ANTHROPIC_API_KEY in .env")
         return
+
+    # Initialize Claim Titan bot once (keep browser alive for efficiency)
+    global claim_titan_bot
+    try:
+        claim_titan_bot = ClaimTitanBot()
+        claim_titan_bot.connect()
+        logger.info("✓ Claim Titan bot initialized and logged in successfully")
+    except Exception as e:
+        logger.error(f"✗ Failed to initialize Claim Titan bot: {e}")
+        logger.error("Will continue without CRM posting. Check CLAIM_TITAN credentials in .env")
+        claim_titan_bot = None
+
+    logger.info("")  # Blank line for readability
 
     while running:
         check_count += 1
@@ -106,6 +130,33 @@ def main():
                             logger.info(f"  Model: {summary.model_used}")
                             logger.info(f"  Generated: {summary.timestamp.strftime('%Y-%m-%d %H:%M:%S')}")
                             logger.info(f"  " + "="*70 + "\n")
+
+                            # Post to Claim Titan CRM
+                            if claim_titan_bot:
+                                try:
+                                    logger.info(f"  Posting note to Claim Titan...")
+                                    result = claim_titan_bot.post_note(
+                                        claim_number=summary.claim_number,
+                                        title=summary.title,
+                                        description=summary.description
+                                    )
+
+                                    if result.success:
+                                        logger.info(f"  ✓ Posted to Claim Titan successfully")
+                                    else:
+                                        logger.error(f"  ✗ Failed to post to Claim Titan: {result.error_message}")
+                                        if result.screenshot_path:
+                                            logger.error(f"  Screenshot: {result.screenshot_path}")
+
+                                except ClaimTitanError as e:
+                                    logger.error(f"  ✗ Claim Titan error: {e}")
+                                    logger.error(f"  Note was not posted to CRM, but will continue processing")
+
+                                except Exception as e:
+                                    logger.error(f"  ✗ Unexpected error posting to Claim Titan: {e}")
+                                    logger.error(f"  Note was not posted to CRM, but will continue processing")
+                            else:
+                                logger.warning(f"  ⚠ Claim Titan bot not available, skipping CRM post")
 
                             # Mark as processed in database
                             monitor.mark_email_processed(email_data, status="success")
@@ -144,6 +195,14 @@ def main():
         if running:
             logger.info(f"Sleeping for {Config.EMAIL_CHECK_INTERVAL} seconds...")
             time.sleep(Config.EMAIL_CHECK_INTERVAL)
+
+    # Cleanup bot before exit
+    if claim_titan_bot:
+        try:
+            claim_titan_bot.disconnect()
+            logger.info("✓ Claim Titan bot disconnected")
+        except Exception as e:
+            logger.warning(f"Error disconnecting bot: {e}")
 
     logger.info("\n" + "=" * 80)
     logger.info("Email Monitor Daemon Stopped")
