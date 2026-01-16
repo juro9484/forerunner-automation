@@ -350,8 +350,9 @@ class ClaimTitanBot:
 
         try:
             # Find the claim number on the page
-            # It's in a <p> with specific classes, right after "Claim Number" label
-            claim_number_element = self.page.locator('p.text-grey.font-500.text-sm').first
+            # Look for the container that has "Claim Number" label, then get the value below it
+            claim_container = self.page.locator('div:has(p:has-text("Claim Number"))')
+            claim_number_element = claim_container.locator('p.text-grey.font-500.text-sm')
 
             if not claim_number_element.is_visible():
                 raise PostError("Cannot verify claim number - element not found on page")
