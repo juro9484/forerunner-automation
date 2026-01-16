@@ -386,8 +386,9 @@ class ClaimTitanBot:
         self.logger.info("Opening notes form...")
 
         try:
-            # Click quick-add button (opens notes + form in one click)
-            quick_add_button = self.page.locator('div.sidebar-quick-button')
+            # Click the Notes quick-add button specifically (opens notes + form in one click)
+            # Target the button with x-on:click containing 'notes' and 'show_note_form'
+            quick_add_button = self.page.locator('div.sidebar-quick-button[x-on\\:click*="notes"][x-on\\:click*="show_note_form"]')
             quick_add_button.click()
 
             # Wait for form to appear
