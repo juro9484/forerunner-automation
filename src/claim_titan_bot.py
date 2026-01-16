@@ -430,11 +430,18 @@ class ClaimTitanBot:
 
             self.logger.info("Submitting note...")
 
-            # Submit the form
-            notes_form.locator('button[type="submit"].is-primary').click()
+            # Find and click the "Save Note" button explicitly
+            save_button = notes_form.locator('button:has-text("Save Note")')
 
-            # Wait for submission to complete
-            self.page.wait_for_load_state('networkidle')
+            # Ensure button is visible and clickable
+            save_button.wait_for(state='visible', timeout=5000)
+            save_button.click()
+
+            self.logger.info("Clicked Save Note button")
+
+            # Wait a moment for the note to be saved
+            # The form submission is AJAX-based and may not trigger navigation
+            self.page.wait_for_timeout(2000)
 
             self.logger.info("✓ Note submitted")
 
