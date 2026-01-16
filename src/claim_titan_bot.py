@@ -386,10 +386,18 @@ class ClaimTitanBot:
         self.logger.info("Opening notes form...")
 
         try:
-            # Click the Notes quick-add button specifically (opens notes + form in one click)
-            # Target the button with x-on:click containing 'notes' and 'show_note_form'
-            quick_add_button = self.page.locator('div.sidebar-quick-button[x-on\\:click*="notes"][x-on\\:click*="show_note_form"]')
-            quick_add_button.click()
+            # Step 1: Click Notes sidebar button to open notes panel
+            notes_sidebar_button = self.page.locator('button.sidebar-nav-item:has-text("Notes")')
+            notes_sidebar_button.click()
+            self.logger.info("Clicked Notes sidebar button")
+
+            # Wait a moment for sidebar to open
+            self.page.wait_for_timeout(500)
+
+            # Step 2: Click "New Note" button inside the notes panel
+            new_note_button = self.page.locator('a.button:has-text("New Note")')
+            new_note_button.click()
+            self.logger.info("Clicked New Note button")
 
             # Wait for form to appear
             self.page.wait_for_selector('input[name="title"]', state='visible')
