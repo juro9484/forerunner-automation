@@ -162,6 +162,7 @@ def main():
                                         logger.info(f"  Processing {len(email_data.attachments)} attachment(s)...")
 
                                         # Upload attachments (or log in test mode)
+                                        # Returns dict mapping filename -> folder_name (or "Failed" if failed)
                                         upload_results = claim_titan_bot.upload_attachments(
                                             attachments=email_data.attachments,
                                             claim_number=email_data.claim_number,
@@ -172,14 +173,16 @@ def main():
                                         for attachment in email_data.attachments:
                                             filename = attachment.filename
                                             folder = upload_results.get(filename, "Unknown")
-                                            uploaded = upload_results.get(filename, False)
+
+                                            # Determine if upload was successful
+                                            uploaded = folder not in ["Failed", "Unknown"]
 
                                             # Move to permanent storage
                                             try:
                                                 permanent_path = claim_titan_bot.attachment_handler.move_to_permanent_storage(
                                                     attachment=attachment,
                                                     claim_number=email_data.claim_number,
-                                                    folder_name=folder if isinstance(folder, str) else "Other"
+                                                    folder_name=folder if folder not in ["Failed", "Unknown"] else "Other"
                                                 )
 
                                                 # Save to database
@@ -193,7 +196,7 @@ def main():
                                                     content_type=attachment.content_type,
                                                     category=attachment.category,
                                                     ai_description=attachment.description,
-                                                    crm_folder=folder if isinstance(folder, str) else None,
+                                                    crm_folder=folder if folder not in ["Failed", "Unknown"] else None,
                                                     uploaded_to_crm=uploaded
                                                 )
 

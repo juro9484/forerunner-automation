@@ -491,32 +491,48 @@ class ClaimTitanBot:
         self.logger.info("Scraping document folder names...")
 
         try:
-            # Navigate to documents/attachments section if not already there
-            # Look for document upload area or folder buttons
-            # This will depend on Claim Titan's UI structure - needs inspection
+            # Step 1: Click the Files tab to navigate to files section
+            files_tab = self.page.locator('a.nav-item:has-text("Files")')
 
-            # For now, return a placeholder - this needs to be implemented
-            # based on actual Claim Titan UI
+            if not files_tab.is_visible():
+                # Try alternative selector with href
+                files_tab = self.page.locator('a[href*="/files"]').first
+
+            files_tab.click()
+            self.logger.info("Clicked Files tab")
+
+            # Wait for page to load
+            self.page.wait_for_load_state('networkidle')
+
+            # Wait for folder cards to appear
+            self.page.wait_for_selector('section.column-12', state='visible', timeout=10000)
+
+            # Step 2: Find all folder name elements
+            # Folders are in <p class="text-primary hover:text-underline font-bold ...">
+            folder_elements = self.page.locator('p.text-primary.hover\\:text-underline.font-bold')
+
+            # Step 3: Extract text from each folder element
             folders = []
+            count = folder_elements.count()
 
-            # Try to find folder buttons or dropdown options
-            # Example selectors (needs to be adjusted based on actual UI):
-            # folder_elements = self.page.locator('.document-folder-button, .folder-option')
-            # for element in folder_elements.all():
-            #     folder_name = element.inner_text().strip()
-            #     folders.append(folder_name)
-
-            # TODO: Implement actual folder scraping based on Claim Titan UI
+            for i in range(count):
+                folder_name = folder_elements.nth(i).inner_text().strip()
+                if folder_name:  # Skip empty folder names
+                    folders.append(folder_name)
 
             if not folders:
-                self.logger.warning("No document folders found - may need UI inspection")
-                # Return common defaults as fallback
-                folders = ["Documents", "Other"]
+                self.logger.warning("No document folders found on Files page")
+                # Return a default fallback
+                folders = ["Other"]
 
-            self.logger.info(f"Found {len(folders)} folder(s): {folders}")
+            self.logger.info(f"✓ Found {len(folders)} folder(s): {folders}")
             return folders
 
         except Exception as e:
+            self.logger.error(f"Failed to scrape document folders: {e}")
+            # Take screenshot for debugging
+            screenshot_path = self._take_screenshot(f"folder_scrape_failed")
+            self.logger.error(f"Screenshot saved: {screenshot_path}")
             raise PostError(f"Failed to scrape document folders: {e}")
 
     def upload_attachments(
@@ -524,7 +540,7 @@ class ClaimTitanBot:
         attachments: List[AttachmentData],
         claim_number: str,
         email_summary: str
-    ) -> Dict[str, bool]:
+    ) -> Dict[str, str]:
         """
         Upload attachments to Claim Titan with AI-powered folder matching.
 
@@ -534,7 +550,7 @@ class ClaimTitanBot:
             email_summary: Email summary for context
 
         Returns:
-            Dictionary mapping filename to upload success status
+            Dictionary mapping filename to folder name (or "Failed" if upload failed)
         """
         if not attachments:
             self.logger.info("No attachments to upload")
@@ -547,7 +563,7 @@ class ClaimTitanBot:
             available_folders = self.scrape_document_folders()
         except Exception as e:
             self.logger.error(f"Failed to scrape folders: {e}")
-            return {att.filename: False for att in attachments}
+            return {att.filename: "Failed" for att in attachments}
 
         # Use AI to match attachments to folders
         matches = self.attachment_handler.match_attachments_to_folders(
@@ -558,7 +574,7 @@ class ClaimTitanBot:
 
         if not matches:
             self.logger.error("Failed to match attachments to folders")
-            return {att.filename: False for att in attachments}
+            return {att.filename: "Failed" for att in attachments}
 
         # Upload each file (or log in test mode)
         results = {}
@@ -568,7 +584,7 @@ class ClaimTitanBot:
 
             if not folder:
                 self.logger.error(f"No folder match for {filename}, skipping")
-                results[filename] = False
+                results[filename] = "Failed"
                 continue
 
             try:
@@ -578,20 +594,21 @@ class ClaimTitanBot:
                         attachment=attachment,
                         folder_name=folder
                     )
-                    results[filename] = success
 
                     if success:
                         self.logger.info(f"✓ Uploaded {filename} to folder: {folder}")
+                        results[filename] = folder
                     else:
                         self.logger.error(f"✗ Failed to upload {filename}")
+                        results[filename] = "Failed"
                 else:
                     # Test mode - just log what would happen
                     self.logger.info(f"[TEST MODE] Would upload {filename} to folder: {folder}")
-                    results[filename] = True  # Treat as success in test mode
+                    results[filename] = folder  # Return folder name in test mode
 
             except Exception as e:
                 self.logger.error(f"Error uploading {filename}: {e}")
-                results[filename] = False
+                results[filename] = "Failed"
 
         return results
 
