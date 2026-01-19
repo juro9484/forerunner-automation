@@ -95,6 +95,42 @@ class EmailDatabase:
             """
             )
 
+            # Email attachments table
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS email_attachments (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    email_id TEXT NOT NULL,
+                    claim_number TEXT NOT NULL,
+                    original_filename TEXT NOT NULL,
+                    saved_filename TEXT NOT NULL,
+                    file_path TEXT NOT NULL,
+                    file_size INTEGER NOT NULL,
+                    content_type TEXT,
+                    category TEXT,
+                    ai_description TEXT,
+                    crm_folder TEXT,
+                    uploaded_to_crm BOOLEAN DEFAULT 0,
+                    date_saved TEXT NOT NULL,
+                    FOREIGN KEY (email_id) REFERENCES processed_emails(email_id)
+                )
+            """
+            )
+
+            cursor.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_attachments_email_id
+                ON email_attachments(email_id)
+            """
+            )
+
+            cursor.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_attachments_claim_number
+                ON email_attachments(claim_number)
+            """
+            )
+
             self.logger.debug("Database schema initialized")
 
     def is_processed(self, email_id: str) -> bool:
@@ -327,6 +363,135 @@ class EmailDatabase:
             self.logger.info(f"Cleaned up {deleted_count} old records")
 
             return deleted_count
+
+    def save_attachment(
+        self,
+        email_id: str,
+        claim_number: str,
+        original_filename: str,
+        saved_filename: str,
+        file_path: str,
+        file_size: int,
+        content_type: str,
+        category: Optional[str] = None,
+        ai_description: Optional[str] = None,
+        crm_folder: Optional[str] = None,
+        uploaded_to_crm: bool = False,
+    ) -> None:
+        """
+        Save attachment metadata to database.
+
+        Args:
+            email_id: Email identifier
+            claim_number: Claim number
+            original_filename: Original filename from email
+            saved_filename: Filename as saved locally
+            file_path: Full path to saved file
+            file_size: File size in bytes
+            content_type: MIME type
+            category: AI-determined category
+            ai_description: AI-generated description
+            crm_folder: CRM folder name if uploaded
+            uploaded_to_crm: Whether file was uploaded to CRM
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+
+            cursor.execute(
+                """
+                INSERT INTO email_attachments (
+                    email_id, claim_number, original_filename, saved_filename,
+                    file_path, file_size, content_type, category, ai_description,
+                    crm_folder, uploaded_to_crm, date_saved
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+                (
+                    email_id,
+                    claim_number,
+                    original_filename,
+                    saved_filename,
+                    file_path,
+                    file_size,
+                    content_type,
+                    category,
+                    ai_description,
+                    crm_folder,
+                    uploaded_to_crm,
+                    datetime.now().isoformat(),
+                ),
+            )
+
+            self.logger.info(f"Saved attachment metadata: {original_filename}")
+
+    def mark_attachment_uploaded(self, email_id: str, filename: str) -> None:
+        """
+        Mark an attachment as uploaded to CRM.
+
+        Args:
+            email_id: Email identifier
+            filename: Original filename
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+
+            cursor.execute(
+                """
+                UPDATE email_attachments
+                SET uploaded_to_crm = 1
+                WHERE email_id = ? AND original_filename = ?
+            """,
+                (email_id, filename),
+            )
+
+            self.logger.info(f"Marked attachment as uploaded: {filename}")
+
+    def get_attachments_for_email(self, email_id: str) -> list:
+        """
+        Get all attachments for an email.
+
+        Args:
+            email_id: Email identifier
+
+        Returns:
+            List of attachment records
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+
+            cursor.execute(
+                """
+                SELECT * FROM email_attachments
+                WHERE email_id = ?
+                ORDER BY date_saved
+            """,
+                (email_id,),
+            )
+
+            return [dict(row) for row in cursor.fetchall()]
+
+    def get_attachments_for_claim(self, claim_number: str) -> list:
+        """
+        Get all attachments for a claim.
+
+        Args:
+            claim_number: Claim number
+
+        Returns:
+            List of attachment records
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+
+            cursor.execute(
+                """
+                SELECT * FROM email_attachments
+                WHERE claim_number = ?
+                ORDER BY date_saved DESC
+            """,
+                (claim_number,),
+            )
+
+            return [dict(row) for row in cursor.fetchall()]
 
 
 # Example usage

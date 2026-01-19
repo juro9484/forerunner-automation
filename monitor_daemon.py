@@ -155,6 +155,59 @@ def main():
                                 except Exception as e:
                                     logger.error(f"  ✗ Unexpected error posting to Claim Titan: {e}")
                                     logger.error(f"  Note was not posted to CRM, but will continue processing")
+
+                                # Handle attachments if any
+                                if email_data.attachments and claim_titan_bot:
+                                    try:
+                                        logger.info(f"  Processing {len(email_data.attachments)} attachment(s)...")
+
+                                        # Upload attachments (or log in test mode)
+                                        upload_results = claim_titan_bot.upload_attachments(
+                                            attachments=email_data.attachments,
+                                            claim_number=email_data.claim_number,
+                                            email_summary=summary.description
+                                        )
+
+                                        # Save attachment metadata to database
+                                        for attachment in email_data.attachments:
+                                            filename = attachment.filename
+                                            folder = upload_results.get(filename, "Unknown")
+                                            uploaded = upload_results.get(filename, False)
+
+                                            # Move to permanent storage
+                                            try:
+                                                permanent_path = claim_titan_bot.attachment_handler.move_to_permanent_storage(
+                                                    attachment=attachment,
+                                                    claim_number=email_data.claim_number,
+                                                    folder_name=folder if isinstance(folder, str) else "Other"
+                                                )
+
+                                                # Save to database
+                                                monitor.db.save_attachment(
+                                                    email_id=email_data.email_id,
+                                                    claim_number=email_data.claim_number,
+                                                    original_filename=attachment.filename,
+                                                    saved_filename=permanent_path.split('/')[-1],
+                                                    file_path=permanent_path,
+                                                    file_size=attachment.file_size,
+                                                    content_type=attachment.content_type,
+                                                    category=attachment.category,
+                                                    ai_description=attachment.description,
+                                                    crm_folder=folder if isinstance(folder, str) else None,
+                                                    uploaded_to_crm=uploaded
+                                                )
+
+                                                logger.info(f"  ✓ Saved {filename} to {permanent_path}")
+
+                                            except Exception as e:
+                                                logger.error(f"  ✗ Error saving {filename}: {e}")
+
+                                        logger.info(f"  ✓ Processed all attachments")
+
+                                    except Exception as e:
+                                        logger.error(f"  ✗ Error processing attachments: {e}")
+                                        logger.error(f"  Attachments not uploaded, but will continue processing")
+
                             else:
                                 logger.warning(f"  ⚠ Claim Titan bot not available, skipping CRM post")
 

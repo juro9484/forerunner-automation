@@ -6,10 +6,11 @@ Automates posting notes to the Claim Titan CRM using Playwright browser automati
 import logging
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List, Dict
 from playwright.sync_api import sync_playwright, Browser, Page, Playwright
 
 from config import Config
+from attachment_handler import AttachmentHandler, AttachmentData
 
 
 @dataclass
@@ -94,6 +95,9 @@ class ClaimTitanBot:
 
         if not self.username or not self.password:
             raise ValueError("Claim Titan credentials not configured in .env file")
+
+        # Attachment handler for file operations
+        self.attachment_handler = AttachmentHandler()
 
         self.logger.info("ClaimTitanBot initialized")
 
@@ -473,6 +477,166 @@ class ClaimTitanBot:
         except Exception as e:
             self.logger.error(f"Failed to take screenshot: {e}")
             return ""
+
+    def scrape_document_folders(self) -> List[str]:
+        """
+        Scrape available document folder names from the current claim page.
+
+        Returns:
+            List of folder names available for this claim
+
+        Raises:
+            PostError: If unable to scrape folders
+        """
+        self.logger.info("Scraping document folder names...")
+
+        try:
+            # Navigate to documents/attachments section if not already there
+            # Look for document upload area or folder buttons
+            # This will depend on Claim Titan's UI structure - needs inspection
+
+            # For now, return a placeholder - this needs to be implemented
+            # based on actual Claim Titan UI
+            folders = []
+
+            # Try to find folder buttons or dropdown options
+            # Example selectors (needs to be adjusted based on actual UI):
+            # folder_elements = self.page.locator('.document-folder-button, .folder-option')
+            # for element in folder_elements.all():
+            #     folder_name = element.inner_text().strip()
+            #     folders.append(folder_name)
+
+            # TODO: Implement actual folder scraping based on Claim Titan UI
+
+            if not folders:
+                self.logger.warning("No document folders found - may need UI inspection")
+                # Return common defaults as fallback
+                folders = ["Documents", "Other"]
+
+            self.logger.info(f"Found {len(folders)} folder(s): {folders}")
+            return folders
+
+        except Exception as e:
+            raise PostError(f"Failed to scrape document folders: {e}")
+
+    def upload_attachments(
+        self,
+        attachments: List[AttachmentData],
+        claim_number: str,
+        email_summary: str
+    ) -> Dict[str, bool]:
+        """
+        Upload attachments to Claim Titan with AI-powered folder matching.
+
+        Args:
+            attachments: List of attachment data objects
+            claim_number: Claim number
+            email_summary: Email summary for context
+
+        Returns:
+            Dictionary mapping filename to upload success status
+        """
+        if not attachments:
+            self.logger.info("No attachments to upload")
+            return {}
+
+        self.logger.info(f"Processing {len(attachments)} attachment(s) for upload...")
+
+        # Scrape available folders
+        try:
+            available_folders = self.scrape_document_folders()
+        except Exception as e:
+            self.logger.error(f"Failed to scrape folders: {e}")
+            return {att.filename: False for att in attachments}
+
+        # Use AI to match attachments to folders
+        matches = self.attachment_handler.match_attachments_to_folders(
+            attachments=attachments,
+            available_folders=available_folders,
+            email_summary=email_summary
+        )
+
+        if not matches:
+            self.logger.error("Failed to match attachments to folders")
+            return {att.filename: False for att in attachments}
+
+        # Upload each file (or log in test mode)
+        results = {}
+        for attachment in attachments:
+            filename = attachment.filename
+            folder = matches.get(filename)
+
+            if not folder:
+                self.logger.error(f"No folder match for {filename}, skipping")
+                results[filename] = False
+                continue
+
+            try:
+                if Config.UPLOAD_ATTACHMENTS_TO_CRM:
+                    # Actually upload the file
+                    success = self._upload_file_to_folder(
+                        attachment=attachment,
+                        folder_name=folder
+                    )
+                    results[filename] = success
+
+                    if success:
+                        self.logger.info(f"✓ Uploaded {filename} to folder: {folder}")
+                    else:
+                        self.logger.error(f"✗ Failed to upload {filename}")
+                else:
+                    # Test mode - just log what would happen
+                    self.logger.info(f"[TEST MODE] Would upload {filename} to folder: {folder}")
+                    results[filename] = True  # Treat as success in test mode
+
+            except Exception as e:
+                self.logger.error(f"Error uploading {filename}: {e}")
+                results[filename] = False
+
+        return results
+
+    def _upload_file_to_folder(
+        self,
+        attachment: AttachmentData,
+        folder_name: str
+    ) -> bool:
+        """
+        Upload a single file to a specific folder in Claim Titan.
+
+        Args:
+            attachment: Attachment data
+            folder_name: Target folder name
+
+        Returns:
+            True if upload successful, False otherwise
+        """
+        self.logger.info(f"Uploading {attachment.filename} to {folder_name}...")
+
+        try:
+            # Navigate to documents section if needed
+            # This depends on where we are in the UI
+
+            # Click on the target folder
+            # folder_button = self.page.locator(f'button:has-text("{folder_name}")').first
+            # folder_button.click()
+
+            # Find file input element
+            # file_input = self.page.locator('input[type="file"]')
+            # file_input.set_files(attachment.file_path)
+
+            # Wait for upload to complete
+            # self.page.wait_for_selector('.upload-success', timeout=10000)
+
+            # TODO: Implement actual upload logic based on Claim Titan UI
+            # For now, return False to indicate not implemented
+            self.logger.warning("Upload logic not yet implemented - needs UI inspection")
+            return False
+
+        except Exception as e:
+            self.logger.error(f"Upload failed for {attachment.filename}: {e}")
+            screenshot_path = self._take_screenshot(f"upload_failed_{attachment.filename}")
+            self.logger.error(f"Screenshot saved: {screenshot_path}")
+            return False
 
 
 def main():

@@ -61,6 +61,11 @@ class Config:
     DATA_DIR: Path = PROJECT_ROOT / "data"
     DATABASE_PATH: Path = DATA_DIR / "automation.db"
 
+    # Attachment handling
+    ATTACHMENTS_TEMP_DIR: Path = PROJECT_ROOT / "temp_attachments"
+    DOCUMENTS_DIR: Path = PROJECT_ROOT / "documents"
+    UPLOAD_ATTACHMENTS_TO_CRM: bool = os.getenv("UPLOAD_ATTACHMENTS_TO_CRM", "false").lower() == "true"
+
     @classmethod
     def validate(cls) -> bool:
         """

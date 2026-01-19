@@ -18,6 +18,7 @@ import html2text
 from config import Config
 from email_database import EmailDatabase
 from oauth_helper import OAuthHelper
+from attachment_handler import AttachmentHandler
 
 
 @dataclass
@@ -33,6 +34,7 @@ class EmailData:
         subject: Original email subject
         timestamp: When the email was received
         email_id: Unique identifier for the email message
+        attachments: List of AttachmentData objects (empty list if none)
     """
 
     claim_number: str
@@ -42,6 +44,11 @@ class EmailData:
     subject: str
     timestamp: datetime
     email_id: str
+    attachments: list = None  # Will be populated by attachment handler
+
+    def __post_init__(self):
+        if self.attachments is None:
+            self.attachments = []
 
 
 class EmailMonitorError(Exception):
@@ -96,6 +103,9 @@ class EmailMonitor:
 
         # Database for tracking processed emails
         self.db = EmailDatabase() if use_database else None
+
+        # Attachment handler
+        self.attachment_handler = AttachmentHandler()
 
         # HTML to text converter
         self.html_converter = html2text.HTML2Text()
@@ -298,6 +308,11 @@ class EmailMonitor:
             # Extract email body
             email_content = self._get_email_body(message)
 
+            # Extract attachments
+            attachments = self.attachment_handler.extract_attachments(message, email_id)
+            if attachments:
+                self.logger.info(f"Found {len(attachments)} attachment(s)")
+
             # Create structured data
             email_data = EmailData(
                 claim_number=claim_number,
@@ -307,6 +322,7 @@ class EmailMonitor:
                 subject=subject,
                 timestamp=timestamp,
                 email_id=email_id,
+                attachments=attachments,
             )
 
             self.logger.info(
