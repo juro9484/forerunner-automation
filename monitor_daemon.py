@@ -86,12 +86,19 @@ def main():
 
     # Initialize Claim Titan bot once (keep browser alive for efficiency)
     global claim_titan_bot
+    logger.info("DEBUG: About to initialize Claim Titan bot...")
     try:
+        logger.info("DEBUG: Creating ClaimTitanBot instance...")
         claim_titan_bot = ClaimTitanBot()
+        logger.info("DEBUG: Calling connect()...")
         claim_titan_bot.connect()
         logger.info("✓ Claim Titan bot initialized and logged in successfully")
     except Exception as e:
         logger.error(f"✗ Failed to initialize Claim Titan bot: {e}")
+        logger.error(f"DEBUG: Exception type: {type(e).__name__}")
+        logger.error(f"DEBUG: Exception details: {str(e)}")
+        import traceback
+        logger.error(f"DEBUG: Traceback:\n{traceback.format_exc()}")
         logger.error("Will continue without CRM posting. Check CLAIM_TITAN credentials in .env")
         claim_titan_bot = None
 
