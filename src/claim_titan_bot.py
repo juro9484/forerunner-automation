@@ -156,12 +156,20 @@ class ClaimTitanBot:
             self.logger.info("✓ Connected and logged in successfully")
 
         except Exception as e:
-            self.logger.error(f"Failed to connect: {e}")
-            self.logger.error(f"DEBUG: Exception type: {type(e).__name__}")
             import traceback
-            self.logger.error(f"DEBUG: Full traceback:\n{traceback.format_exc()}")
+            error_msg = str(e)
+            error_type = type(e).__name__
+            error_traceback = traceback.format_exc()
+
+            self.logger.error("="*80)
+            self.logger.error("BROWSER LAUNCH FAILED!")
+            self.logger.error(f"Error message: {error_msg}")
+            self.logger.error(f"Error type: {error_type}")
+            self.logger.error(f"Full traceback:\n{error_traceback}")
+            self.logger.error("="*80)
+
             self.disconnect()
-            raise BrowserError(f"Failed to initialize browser: {e}")
+            raise BrowserError(f"Failed to initialize browser: {error_msg}")
 
     def disconnect(self):
         """Close browser and cleanup resources."""
