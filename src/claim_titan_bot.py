@@ -117,9 +117,12 @@ class ClaimTitanBot:
 
         try:
             # Start Playwright
+            self.logger.info("DEBUG: Starting Playwright...")
             self.playwright = sync_playwright().start()
+            self.logger.info("DEBUG: Playwright started successfully")
 
             # Launch browser with cross-platform args
+            self.logger.info(f"DEBUG: Launching browser (headless={self.headless})...")
             self.browser = self.playwright.chromium.launch(
                 headless=self.headless,
                 args=[
@@ -131,15 +134,21 @@ class ClaimTitanBot:
                     '--disable-software-rasterizer'  # Windows headless stability
                 ]
             )
+            self.logger.info("DEBUG: Browser launched successfully")
+
+            self.logger.info("DEBUG: Creating new page...")
             self.page = self.browser.new_page()
+            self.logger.info("DEBUG: Page created successfully")
 
             # Set user agent to look like a real browser
+            self.logger.info("DEBUG: Setting user agent...")
             self.page.set_extra_http_headers({
                 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
             })
 
             # Set default timeout
             self.page.set_default_timeout(30000)  # 30 seconds
+            self.logger.info("DEBUG: Browser configured, starting login...")
 
             # Login
             self._login()
@@ -148,6 +157,9 @@ class ClaimTitanBot:
 
         except Exception as e:
             self.logger.error(f"Failed to connect: {e}")
+            self.logger.error(f"DEBUG: Exception type: {type(e).__name__}")
+            import traceback
+            self.logger.error(f"DEBUG: Full traceback:\n{traceback.format_exc()}")
             self.disconnect()
             raise BrowserError(f"Failed to initialize browser: {e}")
 
