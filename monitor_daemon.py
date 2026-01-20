@@ -33,22 +33,14 @@ logger = logging.getLogger(__name__)
 
 # Global flag for graceful shutdown
 running = True
-claim_titan_bot = None
 
 
 def signal_handler(signum, frame):
     """Handle shutdown signals gracefully."""
-    global running, claim_titan_bot
+    global running
     logger.info("Shutdown signal received. Stopping monitor...")
     running = False
-
-    # Cleanup bot if running
-    if claim_titan_bot:
-        try:
-            claim_titan_bot.disconnect()
-            logger.info("✓ Claim Titan bot disconnected")
-        except Exception as e:
-            logger.warning(f"Error disconnecting bot: {e}")
+    # Note: Browser is opened/closed per email, so no cleanup needed here
 
 
 def main():
@@ -84,24 +76,8 @@ def main():
         logger.error("Cannot continue without summarizer. Check your ANTHROPIC_API_KEY in .env")
         return
 
-    # Initialize Claim Titan bot once (keep browser alive for efficiency)
-    global claim_titan_bot
-    logger.info("DEBUG: About to initialize Claim Titan bot...")
-    try:
-        logger.info("DEBUG: Creating ClaimTitanBot instance...")
-        claim_titan_bot = ClaimTitanBot()
-        logger.info("DEBUG: Calling connect()...")
-        claim_titan_bot.connect()
-        logger.info("✓ Claim Titan bot initialized and logged in successfully")
-    except Exception as e:
-        logger.error(f"✗ Failed to initialize Claim Titan bot: {e}")
-        logger.error(f"DEBUG: Exception type: {type(e).__name__}")
-        logger.error(f"DEBUG: Exception details: {str(e)}")
-        import traceback
-        logger.error(f"DEBUG: Traceback:\n{traceback.format_exc()}")
-        logger.error("Will continue without CRM posting. Check CLAIM_TITAN credentials in .env")
-        claim_titan_bot = None
-
+    # NOTE: We no longer initialize the browser at startup
+    # Instead, we'll open/close it for each email to avoid Windows service issues
     logger.info("")  # Blank line for readability
 
     while running:
@@ -138,39 +114,36 @@ def main():
                             logger.info(f"  Generated: {summary.timestamp.strftime('%Y-%m-%d %H:%M:%S')}")
                             logger.info(f"  " + "="*70 + "\n")
 
-                            # Post to Claim Titan CRM
-                            if claim_titan_bot:
-                                try:
-                                    logger.info(f"  Posting note to Claim Titan...")
-                                    result = claim_titan_bot.post_note(
-                                        claim_number=summary.claim_number,
-                                        title=summary.title,
-                                        description=summary.description
-                                    )
+                            # Post to Claim Titan CRM (open browser for this email only)
+                            bot = None
+                            try:
+                                logger.info(f"  Opening browser and logging into Claim Titan...")
+                                bot = ClaimTitanBot()
+                                bot.connect()
+                                logger.info(f"  ✓ Browser opened and logged in")
 
-                                    if result.success:
-                                        logger.info(f"  ✓ Posted to Claim Titan successfully")
-                                    else:
-                                        logger.error(f"  ✗ Failed to post to Claim Titan: {result.error_message}")
-                                        if result.screenshot_path:
-                                            logger.error(f"  Screenshot: {result.screenshot_path}")
+                                logger.info(f"  Posting note to Claim Titan...")
+                                result = bot.post_note(
+                                    claim_number=summary.claim_number,
+                                    title=summary.title,
+                                    description=summary.description
+                                )
 
-                                except ClaimTitanError as e:
-                                    logger.error(f"  ✗ Claim Titan error: {e}")
-                                    logger.error(f"  Note was not posted to CRM, but will continue processing")
+                                if result.success:
+                                    logger.info(f"  ✓ Posted to Claim Titan successfully")
+                                else:
+                                    logger.error(f"  ✗ Failed to post to Claim Titan: {result.error_message}")
+                                    if result.screenshot_path:
+                                        logger.error(f"  Screenshot: {result.screenshot_path}")
 
-                                except Exception as e:
-                                    logger.error(f"  ✗ Unexpected error posting to Claim Titan: {e}")
-                                    logger.error(f"  Note was not posted to CRM, but will continue processing")
-
-                                # Handle attachments if any
-                                if email_data.attachments and claim_titan_bot:
+                                # Handle attachments if any (while browser is still open)
+                                if email_data.attachments and bot:
                                     try:
                                         logger.info(f"  Processing {len(email_data.attachments)} attachment(s)...")
 
                                         # Upload attachments (or log in test mode)
                                         # Returns dict mapping filename -> folder_name (or "Failed" if failed)
-                                        upload_results = claim_titan_bot.upload_attachments(
+                                        upload_results = bot.upload_attachments(
                                             attachments=email_data.attachments,
                                             claim_number=email_data.claim_number,
                                             email_summary=summary.description
@@ -186,7 +159,7 @@ def main():
 
                                             # Move to permanent storage
                                             try:
-                                                permanent_path = claim_titan_bot.attachment_handler.move_to_permanent_storage(
+                                                permanent_path = bot.attachment_handler.move_to_permanent_storage(
                                                     attachment=attachment,
                                                     claim_number=email_data.claim_number,
                                                     folder_name=folder if folder not in ["Failed", "Unknown"] else "Other"
@@ -218,8 +191,22 @@ def main():
                                         logger.error(f"  ✗ Error processing attachments: {e}")
                                         logger.error(f"  Attachments not uploaded, but will continue processing")
 
-                            else:
-                                logger.warning(f"  ⚠ Claim Titan bot not available, skipping CRM post")
+                            except ClaimTitanError as e:
+                                logger.error(f"  ✗ Claim Titan error: {e}")
+                                logger.error(f"  Note was not posted to CRM, but will continue processing")
+
+                            except Exception as e:
+                                logger.error(f"  ✗ Unexpected error posting to Claim Titan: {e}")
+                                logger.error(f"  Note was not posted to CRM, but will continue processing")
+
+                            finally:
+                                # Always close browser after posting (or if error)
+                                if bot:
+                                    try:
+                                        bot.disconnect()
+                                        logger.info(f"  ✓ Browser closed")
+                                    except Exception as e:
+                                        logger.warning(f"  Error closing browser: {e}")
 
                             # Mark as processed in database
                             monitor.mark_email_processed(email_data, status="success")
@@ -259,13 +246,7 @@ def main():
             logger.info(f"Sleeping for {Config.EMAIL_CHECK_INTERVAL} seconds...")
             time.sleep(Config.EMAIL_CHECK_INTERVAL)
 
-    # Cleanup bot before exit
-    if claim_titan_bot:
-        try:
-            claim_titan_bot.disconnect()
-            logger.info("✓ Claim Titan bot disconnected")
-        except Exception as e:
-            logger.warning(f"Error disconnecting bot: {e}")
+    # Note: No browser cleanup needed - opened/closed per email
 
     logger.info("\n" + "=" * 80)
     logger.info("Email Monitor Daemon Stopped")
