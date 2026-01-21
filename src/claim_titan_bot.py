@@ -406,30 +406,69 @@ class ClaimTitanBot:
             raise PostError(f"Failed to verify claim number: {e}")
 
     def _open_notes_form(self):
-        """Open notes sidebar and add note form."""
+        """Open notes sidebar and add note form with robust timeout handling."""
         self.logger.info("Opening notes form...")
 
-        try:
-            # Step 1: Click Notes sidebar button to open notes panel
-            notes_sidebar_button = self.page.locator('button.sidebar-nav-item:has-text("Notes")')
-            notes_sidebar_button.click()
-            self.logger.info("Clicked Notes sidebar button")
+        max_retries = 2
+        for attempt in range(max_retries):
+            try:
+                if attempt > 0:
+                    self.logger.info(f"Retry attempt {attempt + 1}/{max_retries}...")
 
-            # Wait a moment for sidebar to open
-            self.page.wait_for_timeout(500)
+                # Step 0: Wait for page to be fully loaded and interactive
+                self.logger.info("Waiting for page to be fully loaded...")
+                self.page.wait_for_load_state('networkidle', timeout=60000)
+                self.page.wait_for_load_state('domcontentloaded', timeout=60000)
+                self.logger.info("✓ Page fully loaded")
 
-            # Step 2: Click "New Note" button inside the notes panel
-            new_note_button = self.page.locator('a.button:has-text("New Note")')
-            new_note_button.click()
-            self.logger.info("Clicked New Note button")
+                # Step 1: Click Notes sidebar button to open notes panel
+                self.logger.info("Looking for Notes sidebar button...")
+                notes_sidebar_button = self.page.locator('button.sidebar-nav-item:has-text("Notes")')
 
-            # Wait for note form to appear (scope to the notes form specifically)
-            self.page.wait_for_selector('form[action*="/notes"] input[name="title"]', state='visible')
+                # Wait for button to be visible and enabled with extended timeout
+                notes_sidebar_button.wait_for(state='visible', timeout=60000)
+                self.logger.info("✓ Notes button visible, clicking...")
 
-            self.logger.info("✓ Notes form opened")
+                notes_sidebar_button.click()
+                self.logger.info("✓ Clicked Notes sidebar button")
 
-        except Exception as e:
-            raise PostError(f"Failed to open notes form: {e}")
+                # Wait for sidebar to fully render (longer wait)
+                self.logger.info("Waiting for notes panel to render...")
+                self.page.wait_for_timeout(1500)
+
+                # Step 2: Click "New Note" button inside the notes panel
+                self.logger.info("Looking for New Note button...")
+                new_note_button = self.page.locator('a.button:has-text("New Note")')
+
+                # Wait for button with extended timeout
+                new_note_button.wait_for(state='visible', timeout=60000)
+                self.logger.info("✓ New Note button visible, clicking...")
+
+                new_note_button.click()
+                self.logger.info("✓ Clicked New Note button")
+
+                # Wait for note form to appear (with extended timeout)
+                self.logger.info("Waiting for note form to appear...")
+                self.page.wait_for_selector(
+                    'form[action*="/notes"] input[name="title"]',
+                    state='visible',
+                    timeout=60000
+                )
+
+                self.logger.info("✓ Notes form opened successfully")
+                return  # Success!
+
+            except Exception as e:
+                error_msg = f"Attempt {attempt + 1} failed: {e}"
+                self.logger.error(error_msg)
+
+                if attempt < max_retries - 1:
+                    self.logger.info("Will retry after brief wait...")
+                    self.page.wait_for_timeout(2000)
+                else:
+                    # Final failure - take screenshot and raise
+                    self.logger.error("All retry attempts exhausted")
+                    raise PostError(f"Failed to open notes form after {max_retries} attempts: {e}")
 
     def _fill_note_form(self, title: str, description: str):
         """

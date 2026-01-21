@@ -218,6 +218,10 @@ Format your response as JSON:
 
 ---
 
+**IMPORTANT:** Only summarize the NEWEST message in this email (the most recent reply/communication at the top).
+IGNORE any quoted text, forwarded messages, or previous email history (text starting with ">", "On [date] wrote:", "From:", "-----Original Message-----", etc.).
+Focus only on what the sender is communicating in THIS specific message.
+
 Please provide a summary in the JSON format specified. Use the From/To fields to understand who is communicating with whom and create an accurate title and description."""
 
         return prompt
