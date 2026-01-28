@@ -409,7 +409,7 @@ class ClaimTitanBot:
         """Open notes sidebar and add note form with robust timeout handling."""
         self.logger.info("Opening notes form...")
 
-        max_retries = 2
+        max_retries = 3
         for attempt in range(max_retries):
             try:
                 if attempt > 0:
@@ -421,31 +421,90 @@ class ClaimTitanBot:
                 self.page.wait_for_load_state('domcontentloaded', timeout=60000)
                 self.logger.info("✓ Page fully loaded")
 
+                # Additional wait for any animations/JavaScript to settle
+                self.page.wait_for_timeout(1000)
+
                 # Step 1: Click Notes sidebar button to open notes panel
                 self.logger.info("Looking for Notes sidebar button...")
                 notes_sidebar_button = self.page.locator('button.sidebar-nav-item:has-text("Notes")')
 
-                # Wait for button to be visible and enabled with extended timeout
+                # Wait for button to be visible with extended timeout
                 notes_sidebar_button.wait_for(state='visible', timeout=60000)
-                self.logger.info("✓ Notes button visible, clicking...")
+                self.logger.info("✓ Notes button found and visible")
 
-                notes_sidebar_button.click()
-                self.logger.info("✓ Clicked Notes sidebar button")
+                # Scroll element into view to ensure it's clickable
+                self.logger.info("Scrolling Notes button into view...")
+                notes_sidebar_button.scroll_into_view_if_needed(timeout=10000)
+                self.page.wait_for_timeout(500)
 
-                # Wait for sidebar to fully render (longer wait)
+                # Try clicking with multiple strategies
+                click_success = False
+
+                # Strategy 1: Normal click
+                try:
+                    self.logger.info("Attempting normal click on Notes button...")
+                    notes_sidebar_button.click(timeout=10000)
+                    click_success = True
+                    self.logger.info("✓ Normal click succeeded")
+                except Exception as e:
+                    self.logger.warning(f"Normal click failed: {e}")
+
+                # Strategy 2: Force click (if normal click failed)
+                if not click_success:
+                    try:
+                        self.logger.info("Attempting force click on Notes button...")
+                        notes_sidebar_button.click(force=True, timeout=10000)
+                        click_success = True
+                        self.logger.info("✓ Force click succeeded")
+                    except Exception as e:
+                        self.logger.warning(f"Force click failed: {e}")
+
+                # Strategy 3: JavaScript click (if force click failed)
+                if not click_success:
+                    try:
+                        self.logger.info("Attempting JavaScript click on Notes button...")
+                        self.page.evaluate("document.querySelector('button.sidebar-nav-item:has-text(\"Notes\")').click()")
+                        click_success = True
+                        self.logger.info("✓ JavaScript click succeeded")
+                    except Exception as e:
+                        self.logger.warning(f"JavaScript click failed: {e}")
+
+                if not click_success:
+                    raise PostError("All click strategies failed for Notes button")
+
+                # Wait for sidebar to fully render and verify it opened
                 self.logger.info("Waiting for notes panel to render...")
-                self.page.wait_for_timeout(1500)
+                self.page.wait_for_timeout(2000)
+
+                # Verify the notes panel actually opened by checking for "New Note" button
+                self.logger.info("Verifying notes panel opened...")
+                new_note_button = self.page.locator('a.button:has-text("New Note")')
+                new_note_button.wait_for(state='visible', timeout=10000)
+                self.logger.info("✓ Notes panel confirmed open")
 
                 # Step 2: Click "New Note" button inside the notes panel
-                self.logger.info("Looking for New Note button...")
-                new_note_button = self.page.locator('a.button:has-text("New Note")')
+                self.logger.info("Scrolling New Note button into view...")
+                new_note_button.scroll_into_view_if_needed(timeout=10000)
+                self.page.wait_for_timeout(500)
 
-                # Wait for button with extended timeout
-                new_note_button.wait_for(state='visible', timeout=60000)
-                self.logger.info("✓ New Note button visible, clicking...")
+                # Try clicking New Note button with multiple strategies
+                click_success = False
 
-                new_note_button.click()
-                self.logger.info("✓ Clicked New Note button")
+                try:
+                    self.logger.info("Attempting normal click on New Note button...")
+                    new_note_button.click(timeout=10000)
+                    click_success = True
+                    self.logger.info("✓ Clicked New Note button")
+                except Exception as e:
+                    self.logger.warning(f"Normal click on New Note failed: {e}")
+                    try:
+                        self.logger.info("Attempting force click on New Note button...")
+                        new_note_button.click(force=True, timeout=10000)
+                        click_success = True
+                        self.logger.info("✓ Force clicked New Note button")
+                    except Exception as e2:
+                        self.logger.error(f"Force click on New Note also failed: {e2}")
+                        raise PostError(f"Failed to click New Note button: {e2}")
 
                 # Wait for note form to appear (with extended timeout)
                 self.logger.info("Waiting for note form to appear...")
@@ -464,7 +523,7 @@ class ClaimTitanBot:
 
                 if attempt < max_retries - 1:
                     self.logger.info("Will retry after brief wait...")
-                    self.page.wait_for_timeout(2000)
+                    self.page.wait_for_timeout(3000)
                 else:
                     # Final failure - take screenshot and raise
                     self.logger.error("All retry attempts exhausted")
