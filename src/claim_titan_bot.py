@@ -12,6 +12,13 @@ from playwright.sync_api import sync_playwright, Browser, Page, Playwright
 from config import Config
 from attachment_handler import AttachmentHandler, AttachmentData
 
+# Import ClientData for type hints
+try:
+    from contract_parser import ClientData
+except ImportError:
+    # Allow module to work even if contract_parser isn't available
+    ClientData = None
+
 
 @dataclass
 class ClaimTitanResult:
@@ -30,6 +37,27 @@ class ClaimTitanResult:
     claim_number: str
     note_title: str
     note_description: str
+    success: bool
+    timestamp: datetime
+    error_message: Optional[str] = None
+    screenshot_path: Optional[str] = None
+
+
+@dataclass
+class ClaimCreationResult:
+    """
+    Result of creating a new claim in Claim Titan.
+
+    Attributes:
+        client_name: The client's full name
+        claim_url: URL of the created claim (if successful)
+        success: Whether the claim was successfully created
+        timestamp: When the operation was attempted
+        error_message: Error message if failed
+        screenshot_path: Path to error screenshot if captured
+    """
+    client_name: str
+    claim_url: Optional[str]
     success: bool
     timestamp: datetime
     error_message: Optional[str] = None
@@ -123,16 +151,19 @@ class ClaimTitanBot:
 
             # Launch browser with cross-platform args
             self.logger.info(f"DEBUG: Launching browser (headless={self.headless})...")
+            # Use minimal args for Mac stability
+            launch_args = []
+            if self.headless:
+                # Only use these args in headless mode (Windows service)
+                launch_args = [
+                    '--no-sandbox',
+                    '--disable-setuid-sandbox',
+                    '--disable-gpu',
+                ]
+
             self.browser = self.playwright.chromium.launch(
                 headless=self.headless,
-                args=[
-                    '--disable-blink-features=AutomationControlled',  # Hide automation
-                    '--disable-dev-shm-usage',  # Overcome limited resource problems
-                    '--no-sandbox',  # Required for running as service/root
-                    '--disable-setuid-sandbox',  # Required for Linux/macOS
-                    '--disable-gpu',  # Helps with Windows service stability
-                    '--disable-software-rasterizer'  # Windows headless stability
-                ]
+                args=launch_args
             )
             self.logger.info("DEBUG: Browser launched successfully")
 
@@ -266,6 +297,202 @@ class ClaimTitanBot:
                 claim_number=claim_number,
                 note_title=title,
                 note_description=description,
+                success=False,
+                timestamp=datetime.now(),
+                error_message=str(e),
+                screenshot_path=screenshot_path
+            )
+
+    def create_claim(self, client_data) -> ClaimCreationResult:
+        """
+        Create a new claim in Claim Titan from contract data.
+
+        Args:
+            client_data: ClientData object with client and property information
+
+        Returns:
+            ClaimCreationResult with success status and claim URL
+
+        Raises:
+            ClaimTitanError: If claim creation fails
+        """
+        client_name = f"{client_data.first_name} {client_data.last_name or ''}".strip()
+        self.logger.info(f"Creating new claim for client: {client_name}")
+
+        try:
+            # Navigate to Claims page
+            self.logger.info("Navigating to Claims page...")
+            self.page.goto("https://claimtitan.com/claims")
+            self.page.wait_for_load_state('networkidle', timeout=30000)
+            self.logger.info("✓ On Claims page")
+
+            # Click "Add Claim" button to open modal
+            self.logger.info("Clicking Add Claim button...")
+            add_claim_button = self.page.locator('a.button.is-primary:has-text("Add")')
+            add_claim_button.wait_for(state='visible', timeout=10000)
+            add_claim_button.click()
+            self.page.wait_for_timeout(2000)  # Wait for modal to appear
+            self.logger.info("✓ Add Claim modal opened")
+
+            # Click "Add a new policyholder now" link to show new policyholder fields
+            self.logger.info("Switching to new policyholder mode...")
+            new_policyholder_link = self.page.locator('span.text-underline:has-text("Add a new policyholder now")')
+            new_policyholder_link.click()
+            self.page.wait_for_timeout(1000)
+            self.logger.info("✓ New policyholder form displayed")
+
+            # Fill policyholder information
+            self.logger.info("Filling policyholder information...")
+            self.page.locator('input[name="first_name"]').fill(client_data.first_name)
+            if client_data.last_name:
+                self.page.locator('input[name="last_name"]').fill(client_data.last_name)
+            if client_data.phone:
+                self.page.locator('input[name="phone"]').fill(client_data.phone)
+            if client_data.email:
+                self.page.locator('input[name="email"]').fill(client_data.email)
+            self.logger.info("✓ Policyholder info filled")
+
+            # Click "Add a new address now" link to show address fields
+            self.logger.info("Switching to new address mode...")
+            new_address_link = self.page.locator('span.text-underline:has-text("Add a new address now")')
+            new_address_link.click()
+            self.page.wait_for_timeout(1000)
+            self.logger.info("✓ New address form displayed")
+
+            # Fill address information
+            self.logger.info("Filling address information...")
+            self.page.locator('input[name="street"]').fill(client_data.street_address)
+            self.page.locator('input[name="city"]').fill(client_data.city)
+            self.page.locator('select[name="type"]').select_option(client_data.state)  # State dropdown
+            self.page.locator('input[name="zip"]').fill(client_data.zipcode)
+            self.logger.info("✓ Address info filled")
+
+            # Fill optional claim information if available
+            if client_data.claim_number:
+                self.logger.info("Filling claim number...")
+                self.page.locator('input[name="claim_number"]').fill(client_data.claim_number)
+
+            if client_data.loss_date:
+                self.logger.info("Filling loss date...")
+                self.page.locator('input[name="loss_date"]').fill(client_data.loss_date)
+
+            if client_data.loss_type:
+                self.logger.info("Filling loss type...")
+                # Map loss type to dropdown value (all 33 options)
+                loss_type_mapping = {
+                    "fire": "0",
+                    "flood": "1",
+                    "water": "2",
+                    "frozen plumbing": "3",
+                    "hail": "4",
+                    "wind": "5",
+                    "wind / hail": "6",
+                    "wind / rain": "7",
+                    "windstorm": "8",
+                    "tornado": "9",
+                    "hurricane": "10",
+                    "ice": "11",
+                    "smoke": "12",
+                    "business interruption": "13",
+                    "collapse": "14",
+                    "lightning": "15",
+                    "theft": "16",
+                    "vandalism": "17",
+                    "auto": "18",
+                    "vehicles": "19",
+                    "mold": "20",
+                    "ordinance and law": "21",
+                    "supplemental": "22",
+                    "all risk": "23",
+                    "accidental discharge": "24",
+                    "soot": "25",
+                    "puff back": "26",
+                    "roof leak": "27",
+                    "tropical storm": "28",
+                    "explosion": "29",
+                    "plumbing failure": "30",
+                    "falling object": "31",
+                    "backup": "32",
+                }
+                loss_value = loss_type_mapping.get(client_data.loss_type.lower())
+                if loss_value:
+                    self.page.locator('select[name="loss_type"]').select_option(loss_value)
+                    self.logger.info(f"✓ Selected loss type: {client_data.loss_type}")
+
+            # Fill insurance company if available (on Insurance tab)
+            if client_data.insurance_company:
+                self.logger.info("Switching to Insurance tab...")
+                insurance_tab = self.page.locator('button.nav-item:has-text("Insurance")')
+                insurance_tab.click()
+                self.page.wait_for_timeout(1000)
+                self.logger.info("✓ On Insurance tab")
+
+                # Search for existing insurance company first
+                self.logger.info(f"Searching for insurance company: {client_data.insurance_company}")
+                search_input = self.page.locator('input[placeholder="Search Providers..."]')
+                search_input.fill(client_data.insurance_company)
+
+                # Wait for search results to load (debounced 250ms + network)
+                self.page.wait_for_timeout(1500)
+
+                # Check if any results appeared
+                results_list = self.page.locator('li[x-combobox\\:option]')
+                result_count = results_list.count()
+
+                if result_count > 0:
+                    # Found matches - click on the first one
+                    self.logger.info(f"✓ Found {result_count} insurance company match(es)")
+                    first_result = results_list.first
+                    first_result.click()
+                    self.logger.info(f"✓ Selected existing insurance company")
+                else:
+                    # No results found - need to add new
+                    self.logger.info("No existing insurance company found, adding new...")
+
+                    # Clear search box first
+                    search_input.clear()
+                    self.page.wait_for_timeout(500)
+
+                    # Click "Add a new provider now"
+                    new_insurance_link = self.page.locator('span.text-underline:has-text("Add a new provider now")')
+                    new_insurance_link.click()
+                    self.page.wait_for_timeout(1000)
+
+                    # Fill new insurance company form
+                    self.logger.info("Filling new insurance company...")
+                    self.page.locator('input[name="insurance_name"]').fill(client_data.insurance_company)
+                    self.logger.info("✓ New insurance company filled")
+
+            # Submit the form
+            self.logger.info("Submitting claim creation form...")
+            submit_button = self.page.locator('button[type="submit"].is-primary:has-text("Save")')
+            submit_button.click()
+
+            # Wait for form submission and redirect
+            self.page.wait_for_load_state('networkidle', timeout=30000)
+            self.page.wait_for_timeout(2000)
+
+            # Get the URL of the created claim
+            claim_url = self.page.url
+
+            self.logger.info(f"✓ Successfully created claim for {client_name}")
+            self.logger.info(f"✓ Claim URL: {claim_url}")
+
+            return ClaimCreationResult(
+                client_name=client_name,
+                claim_url=claim_url,
+                success=True,
+                timestamp=datetime.now()
+            )
+
+        except Exception as e:
+            screenshot_path = self._take_screenshot(f"claim_creation_{client_data.first_name}")
+            self.logger.error(f"Failed to create claim for {client_name}: {e}")
+            self.logger.error(f"Screenshot saved to: {screenshot_path}")
+
+            return ClaimCreationResult(
+                client_name=client_name,
+                claim_url=None,
                 success=False,
                 timestamp=datetime.now(),
                 error_message=str(e),

@@ -27,7 +27,7 @@ class EmailData:
     Structured data container for email information.
 
     Attributes:
-        claim_number: Extracted claim number from subject line
+        claim_number: Extracted claim number from subject line (None for new contracts)
         email_content: Parsed email body content (plain text)
         sender: Email address of sender (From field)
         recipient: Email address of recipient (To field)
@@ -37,13 +37,13 @@ class EmailData:
         attachments: List of AttachmentData objects (empty list if none)
     """
 
-    claim_number: str
     email_content: str
     sender: str
     recipient: str
     subject: str
     timestamp: datetime
     email_id: str
+    claim_number: Optional[str] = None  # None for new contract emails
     attachments: list = None  # Will be populated by attachment handler
 
     def __post_init__(self):
@@ -301,8 +301,13 @@ class EmailMonitor:
 
             # Extract claim number from subject
             claim_number = self._extract_claim_number(subject)
-            if not claim_number:
-                self.logger.debug(f"No claim number found in subject: {subject}")
+
+            # Check if this is a contract email (new client)
+            is_contract_email = "contract" in subject.lower()
+
+            # Skip if no claim number AND not a contract email
+            if not claim_number and not is_contract_email:
+                self.logger.debug(f"No claim number or contract keyword in subject: {subject}")
                 return None
 
             # Extract email body
@@ -315,7 +320,7 @@ class EmailMonitor:
 
             # Create structured data
             email_data = EmailData(
-                claim_number=claim_number,
+                claim_number=claim_number,  # Will be None for contract emails
                 email_content=email_content,
                 sender=sender,
                 recipient=recipient,
@@ -325,9 +330,14 @@ class EmailMonitor:
                 attachments=attachments,
             )
 
-            self.logger.info(
-                f"Parsed email from {sender} with claim #{claim_number} (ID: {email_id})"
-            )
+            if is_contract_email:
+                self.logger.info(
+                    f"Parsed CONTRACT email from {sender} (ID: {email_id})"
+                )
+            else:
+                self.logger.info(
+                    f"Parsed email from {sender} with claim #{claim_number} (ID: {email_id})"
+                )
             return email_data
 
         except Exception as e:

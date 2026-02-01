@@ -16,7 +16,8 @@ sys.path.insert(0, str(Path(__file__).parent / "src"))
 
 from email_monitor import EmailMonitor, EmailMonitorError
 from summarizer import EmailSummarizer, SummarizerError
-from claim_titan_bot import ClaimTitanBot, ClaimTitanError
+from claim_titan_bot import ClaimTitanBot, ClaimTitanError, ClaimCreationResult
+from contract_parser import ContractParser, ContractParserError
 from config import Config
 
 # Configure logging
@@ -60,6 +61,7 @@ def main():
     logger.info(f"OAuth enabled: {Config.USE_OAUTH}")
     logger.info(f"AI Provider: {Config.AI_PROVIDER}")
     logger.info(f"AI Summarization: ENABLED")
+    logger.info(f"Contract Processing: ENABLED (detects 'contract' in subject)")
     logger.info(f"CRM Integration: Claim Titan (ENABLED)")
     logger.info("=" * 80)
     logger.info("Press Ctrl+C to stop\n")
@@ -90,16 +92,102 @@ def main():
                 emails = monitor.process_emails()
 
                 if emails:
-                    logger.info(f"✓ Found {len(emails)} new email(s) with claim numbers")
+                    logger.info(f"✓ Found {len(emails)} new email(s)")
 
                     for email_data in emails:
-                        logger.info(f"\n  Claim #{email_data.claim_number}")
+                        # Check if this is a contract email (new client)
+                        is_contract_email = "contract" in email_data.subject.lower()
+
+                        if is_contract_email:
+                            logger.info(f"\n  📄 CONTRACT EMAIL DETECTED")
+                        else:
+                            logger.info(f"\n  Claim #{email_data.claim_number}")
+
                         logger.info(f"  From: {email_data.sender}")
                         logger.info(f"  Subject: {email_data.subject}")
                         logger.info(f"  Content preview: {email_data.email_content[:100]}...")
 
-                        # Generate AI summary
-                        try:
+                        # Route to appropriate workflow
+                        if is_contract_email:
+                            # ===== CONTRACT WORKFLOW: Parse contract and create new claim =====
+                            try:
+                                logger.info(f"\n  Starting CONTRACT processing workflow...")
+
+                                # Find PDF attachment
+                                pdf_attachment = None
+                                for attachment in email_data.attachments:
+                                    if attachment.content_type == "application/pdf" or attachment.filename.lower().endswith('.pdf'):
+                                        pdf_attachment = attachment
+                                        break
+
+                                if not pdf_attachment:
+                                    logger.error(f"  ✗ No PDF attachment found in contract email")
+                                    monitor.mark_email_processed(email_data, status="failed", error_message="No PDF attachment")
+                                    continue
+
+                                logger.info(f"  ✓ Found PDF attachment: {pdf_attachment.filename}")
+
+                                # Parse contract with Claude
+                                logger.info(f"  Parsing contract with Claude AI...")
+                                parser = ContractParser()
+                                client_data = parser.parse_contract(pdf_attachment.file_path)
+
+                                client_name = f"{client_data.first_name} {client_data.last_name or ''}".strip()
+                                logger.info(f"\n  " + "="*70)
+                                logger.info(f"  EXTRACTED CLIENT DATA")
+                                logger.info(f"  " + "="*70)
+                                logger.info(f"  Name: {client_name}")
+                                logger.info(f"  Email: {client_data.email or '(not found)'}")
+                                logger.info(f"  Phone: {client_data.phone or '(not found)'}")
+                                logger.info(f"  Address: {client_data.street_address}, {client_data.city}, {client_data.state} {client_data.zipcode}")
+                                logger.info(f"  Insurance: {client_data.insurance_company or '(not found)'}")
+                                logger.info(f"  Loss Type: {client_data.loss_type or '(not found)'}")
+                                logger.info(f"  Loss Date: {client_data.loss_date or '(not found)'}")
+                                logger.info(f"  " + "="*70 + "\n")
+
+                                # Create claim in Claim Titan
+                                bot = None
+                                try:
+                                    logger.info(f"  Opening browser and logging into Claim Titan...")
+                                    bot = ClaimTitanBot()
+                                    bot.connect()
+                                    logger.info(f"  ✓ Browser opened and logged in")
+
+                                    logger.info(f"  Creating new claim in Claim Titan...")
+                                    result = bot.create_claim(client_data)
+
+                                    if result.success:
+                                        logger.info(f"  ✓ Created claim successfully!")
+                                        logger.info(f"  ✓ Claim URL: {result.claim_url}")
+                                        monitor.mark_email_processed(email_data, status="success")
+                                        monitor.mark_as_read(email_data.email_id)
+                                        total_emails_processed += 1
+                                    else:
+                                        logger.error(f"  ✗ Failed to create claim: {result.error_message}")
+                                        if result.screenshot_path:
+                                            logger.error(f"  Screenshot: {result.screenshot_path}")
+                                        monitor.mark_email_processed(email_data, status="failed", error_message=result.error_message)
+
+                                except Exception as e:
+                                    logger.error(f"  ✗ Error creating claim: {e}", exc_info=True)
+                                    monitor.mark_email_processed(email_data, status="failed", error_message=str(e))
+
+                                finally:
+                                    if bot:
+                                        bot.disconnect()
+                                        logger.info(f"  ✓ Browser closed")
+
+                            except ContractParserError as e:
+                                logger.error(f"  ✗ Contract parsing failed: {e}")
+                                monitor.mark_email_processed(email_data, status="failed", error_message=str(e))
+
+                            except Exception as e:
+                                logger.error(f"  ✗ Unexpected error during contract processing: {e}", exc_info=True)
+                                monitor.mark_email_processed(email_data, status="failed", error_message=str(e))
+
+                        else:
+                            # ===== EXISTING CLAIM WORKFLOW: Summarize and post note =====
+                            try:
                             logger.info(f"  Generating AI summary...")
                             summary = summarizer.summarize_email(email_data)
 
