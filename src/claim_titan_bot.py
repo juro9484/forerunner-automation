@@ -329,52 +329,81 @@ class ClaimTitanBot:
             # Click "Add Claim" button to open modal
             self.logger.info("Clicking Add Claim button...")
             add_claim_button = self.page.locator('a.button.is-primary:has-text("Add")')
-            add_claim_button.wait_for(state='visible', timeout=10000)
-            add_claim_button.click()
+
+            # Use robust click
+            self._robust_click(add_claim_button, "Add Claim button")
             self.page.wait_for_timeout(2000)  # Wait for modal to appear
             self.logger.info("✓ Add Claim modal opened")
 
             # Click "Add a new policyholder now" link to show new policyholder fields
             self.logger.info("Switching to new policyholder mode...")
             new_policyholder_link = self.page.locator('span.text-underline:has-text("Add a new policyholder now")')
-            new_policyholder_link.click()
-            self.page.wait_for_timeout(1000)
+
+            # Use robust click
+            self._robust_click(new_policyholder_link, "'Add a new policyholder now' link")
+
+            # Wait for the form fields to appear
+            self.page.wait_for_timeout(2000)
+
+            # Wait for first name field to be visible
+            first_name_field = self.page.locator('input[name="first_name"]')
+            first_name_field.wait_for(state='visible', timeout=10000)
             self.logger.info("✓ New policyholder form displayed")
 
             # Fill policyholder information
             self.logger.info("Filling policyholder information...")
-            self.page.locator('input[name="first_name"]').fill(client_data.first_name)
+            first_name_field.fill(client_data.first_name)
+            self.logger.info(f"  ✓ Filled first name: {client_data.first_name}")
             if client_data.last_name:
                 self.page.locator('input[name="last_name"]').fill(client_data.last_name)
+                self.logger.info(f"  ✓ Filled last name: {client_data.last_name}")
             if client_data.phone:
                 self.page.locator('input[name="phone"]').fill(client_data.phone)
+                self.logger.info(f"  ✓ Filled phone: {client_data.phone}")
             if client_data.email:
                 self.page.locator('input[name="email"]').fill(client_data.email)
+                self.logger.info(f"  ✓ Filled email: {client_data.email}")
             self.logger.info("✓ Policyholder info filled")
 
             # Click "Add a new address now" link to show address fields
             self.logger.info("Switching to new address mode...")
             new_address_link = self.page.locator('span.text-underline:has-text("Add a new address now")')
-            new_address_link.click()
-            self.page.wait_for_timeout(1000)
+
+            # Use robust click
+            self._robust_click(new_address_link, "'Add a new address now' link")
+
+            # Wait for address fields to appear
+            self.page.wait_for_timeout(2000)
+
+            # Wait for street field to be visible
+            street_field = self.page.locator('input[name="street"]')
+            street_field.wait_for(state='visible', timeout=10000)
             self.logger.info("✓ New address form displayed")
 
             # Fill address information
             self.logger.info("Filling address information...")
             self.page.locator('input[name="street"]').fill(client_data.street_address)
+            self.logger.info(f"  ✓ Filled street: {client_data.street_address}")
+
             self.page.locator('input[name="city"]').fill(client_data.city)
+            self.logger.info(f"  ✓ Filled city: {client_data.city}")
+
             self.page.locator('select[name="type"]').select_option(client_data.state)  # State dropdown
+            self.logger.info(f"  ✓ Selected state: {client_data.state}")
+
             self.page.locator('input[name="zip"]').fill(client_data.zipcode)
+            self.logger.info(f"  ✓ Filled zip: {client_data.zipcode}")
+
             self.logger.info("✓ Address info filled")
 
             # Fill optional claim information if available
             if client_data.claim_number:
-                self.logger.info("Filling claim number...")
                 self.page.locator('input[name="claim_number"]').fill(client_data.claim_number)
+                self.logger.info(f"  ✓ Filled claim number: {client_data.claim_number}")
 
             if client_data.loss_date:
-                self.logger.info("Filling loss date...")
                 self.page.locator('input[name="loss_date"]').fill(client_data.loss_date)
+                self.logger.info(f"  ✓ Filled loss date: {client_data.loss_date}")
 
             if client_data.loss_type:
                 self.logger.info("Filling loss type...")
@@ -423,7 +452,9 @@ class ClaimTitanBot:
             if client_data.insurance_company:
                 self.logger.info("Switching to Insurance tab...")
                 insurance_tab = self.page.locator('button.nav-item:has-text("Insurance")')
-                insurance_tab.click()
+
+                # Use robust click
+                self._robust_click(insurance_tab, "Insurance tab")
                 self.page.wait_for_timeout(1000)
                 self.logger.info("✓ On Insurance tab")
 
@@ -455,18 +486,21 @@ class ClaimTitanBot:
 
                     # Click "Add a new provider now"
                     new_insurance_link = self.page.locator('span.text-underline:has-text("Add a new provider now")')
-                    new_insurance_link.click()
+
+                    # Use robust click
+                    self._robust_click(new_insurance_link, "'Add a new provider now' link")
                     self.page.wait_for_timeout(1000)
 
                     # Fill new insurance company form
-                    self.logger.info("Filling new insurance company...")
                     self.page.locator('input[name="insurance_name"]').fill(client_data.insurance_company)
-                    self.logger.info("✓ New insurance company filled")
+                    self.logger.info(f"  ✓ Filled new insurance company: {client_data.insurance_company}")
 
             # Submit the form
             self.logger.info("Submitting claim creation form...")
             submit_button = self.page.locator('button[type="submit"].is-primary:has-text("Save")')
-            submit_button.click()
+
+            # Use robust click
+            self._robust_click(submit_button, "Save button")
 
             # Wait for form submission and redirect
             self.page.wait_for_load_state('networkidle', timeout=30000)
@@ -796,6 +830,47 @@ class ClaimTitanBot:
 
         except Exception as e:
             raise PostError(f"Failed to fill/submit note form: {e}")
+
+    def _robust_click(self, locator, element_name: str, timeout: int = 10000):
+        """
+        Try multiple strategies to click an element robustly.
+
+        Args:
+            locator: Playwright locator object
+            element_name: Name of element for logging
+            timeout: Timeout in milliseconds
+
+        Raises:
+            BrowserError: If all click strategies fail
+        """
+        self.logger.info(f"Attempting to click {element_name}...")
+
+        # Wait for element to be visible
+        locator.wait_for(state='visible', timeout=timeout)
+
+        # Scroll into view
+        locator.scroll_into_view_if_needed(timeout=timeout)
+        self.page.wait_for_timeout(300)
+
+        # Try different click strategies
+        strategies = [
+            ("normal click", lambda: locator.click(timeout=timeout)),
+            ("force click", lambda: locator.click(force=True, timeout=timeout)),
+            ("JavaScript click", lambda: locator.evaluate("el => el.click()"))
+        ]
+
+        for strategy_name, click_fn in strategies:
+            try:
+                self.logger.info(f"  Trying {strategy_name} on {element_name}...")
+                click_fn()
+                self.logger.info(f"  ✓ {strategy_name} succeeded")
+                return  # Success!
+            except Exception as e:
+                self.logger.warning(f"  {strategy_name} failed: {e}")
+                continue
+
+        # All strategies failed
+        raise BrowserError(f"All click strategies failed for {element_name}")
 
     def _take_screenshot(self, claim_number: str) -> str:
         """
