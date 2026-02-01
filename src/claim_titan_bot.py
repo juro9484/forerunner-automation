@@ -491,7 +491,9 @@ class ClaimTitanBot:
                         # Found matches - click on the first one
                         self.logger.info(f"✓ Found {result_count} insurance company match(es)")
                         first_result = results_list.first
-                        first_result.click()
+                        first_result.click(timeout=5000)
+                        # Wait for dropdown to close and selection to be processed
+                        self.page.wait_for_timeout(500)
                         self.logger.info(f"✓ [STEP 9 COMPLETE] Selected existing insurance company")
                     else:
                         # No results found - check if we need to add new via link or if field is already visible
