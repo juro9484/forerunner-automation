@@ -388,39 +388,12 @@ class ClaimTitanBot:
                 self.page.locator('input[name="city"]').fill(client_data.city)
                 self.logger.info(f"  ✓ Filled city: {client_data.city}")
 
-                # State dropdown - click to open, then click the state option
+                # State dropdown - use standard select_option for HTML <select>
                 self.logger.info(f"  Selecting state: {client_data.state}")
 
-                # Click the state dropdown to open it
-                state_dropdown = self.page.locator('select[name="type"]')
-                self._robust_click(state_dropdown, "State dropdown")
-                self.page.wait_for_timeout(500)
-                self.logger.info("  ✓ State dropdown opened")
-
-                # Find and click the state option in the dropdown
-                # Try multiple possible selectors
-                state_option = None
-                selectors_to_try = [
-                    f'option[value="{client_data.state}"]',  # Standard option with value
-                    f'option:has-text("{client_data.state}")',  # Option with state text
-                    f'li:has-text("{client_data.state}")',  # Custom dropdown list item
-                    f'[data-value="{client_data.state}"]',  # Data attribute
-                ]
-
-                for selector in selectors_to_try:
-                    try:
-                        state_option = self.page.locator(selector).first
-                        if state_option.is_visible(timeout=1000):
-                            self.logger.info(f"  Found state option with selector: {selector}")
-                            break
-                    except:
-                        continue
-
-                if state_option and state_option.is_visible():
-                    state_option.click()
-                    self.logger.info(f"  ✓ Selected state: {client_data.state}")
-                else:
-                    raise ClaimTitanError(f"Could not find state option for: {client_data.state}")
+                state_dropdown = self.page.locator('select[wire\\:model="form.state"]')
+                state_dropdown.select_option(value=client_data.state)
+                self.logger.info(f"  ✓ Selected state: {client_data.state}")
 
                 self.page.locator('input[name="zip"]').fill(client_data.zipcode)
                 self.logger.info(f"  ✓ Filled zip: {client_data.zipcode}")
