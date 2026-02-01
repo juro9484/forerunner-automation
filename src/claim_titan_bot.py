@@ -453,7 +453,7 @@ class ClaimTitanBot:
                     }
                     loss_value = loss_type_mapping.get(client_data.loss_type.lower())
                     if loss_value:
-                        self.page.locator('select[name="loss_type"]').select_option(loss_value)
+                        self.page.locator('select[name="loss_type"]').first.select_option(loss_value)
                         self.logger.info(f"  ✓ Selected loss type: {client_data.loss_type}")
 
                 self.logger.info("✓ [STEP 7 COMPLETE] Optional claim info filled")
