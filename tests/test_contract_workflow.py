@@ -26,7 +26,20 @@ logger = logging.getLogger(__name__)
 
 
 def main():
-    contract_path = "/Users/juanrodriguez/Downloads/Hovda_Full Contract.pdf"
+    # Get contract path from command line argument or use default
+    if len(sys.argv) > 1:
+        contract_path = sys.argv[1]
+    else:
+        # Default path (update this to your Windows path)
+        contract_path = "/Users/juanrodriguez/Downloads/Hovda_Full Contract.pdf"
+        logger.warning(f"No contract path provided, using default: {contract_path}")
+        logger.info("Usage: python test_contract_workflow.py <path_to_contract.pdf>\n")
+
+    # Check if file exists
+    if not Path(contract_path).exists():
+        logger.error(f"Contract file not found: {contract_path}")
+        logger.error("Please provide a valid path to a contract PDF")
+        sys.exit(1)
 
     logger.info("="*80)
     logger.info("CONTRACT WORKFLOW TEST")
