@@ -339,29 +339,19 @@ class ClaimTitanBot:
             except Exception as e:
                 raise ClaimTitanError(f"Failed at STEP 2 (clicking Add Claim button): {e}")
 
-            # Click "Add a new policyholder now" link to show new policyholder fields
-            current_step = "clicking 'Add a new policyholder now' link"
-            self.logger.info(f"[STEP 3] Switching to new policyholder mode...")
-            try:
-                new_policyholder_link = self.page.locator('span.text-underline:has-text("Add a new policyholder now")')
-                self._robust_click(new_policyholder_link, "'Add a new policyholder now' link")
-                self.page.wait_for_timeout(2000)
-            except Exception as e:
-                raise ClaimTitanError(f"Failed at STEP 3 (clicking 'Add a new policyholder now'): {e}")
-
-            # Wait for first name field to be visible
+            # Wait for policyholder form fields to be visible (they're shown by default)
             current_step = "waiting for policyholder form fields to appear"
-            self.logger.info(f"[STEP 4] Waiting for policyholder form fields...")
+            self.logger.info(f"[STEP 3] Waiting for policyholder form fields...")
             try:
                 first_name_field = self.page.locator('input[name="first_name"]')
                 first_name_field.wait_for(state='visible', timeout=10000)
-                self.logger.info("✓ [STEP 4 COMPLETE] New policyholder form displayed")
+                self.logger.info("✓ [STEP 3 COMPLETE] Policyholder form fields visible")
             except Exception as e:
-                raise ClaimTitanError(f"Failed at STEP 4 (waiting for policyholder form, specifically input[name='first_name']): {e}")
+                raise ClaimTitanError(f"Failed at STEP 3 (waiting for policyholder form, specifically input[name='first_name']): {e}")
 
             # Fill policyholder information
             current_step = "filling policyholder information"
-            self.logger.info(f"[STEP 5] Filling policyholder information...")
+            self.logger.info(f"[STEP 4] Filling policyholder information...")
             try:
                 first_name_field.fill(client_data.first_name)
                 self.logger.info(f"  ✓ Filled first name: {client_data.first_name}")
@@ -374,33 +364,23 @@ class ClaimTitanBot:
                 if client_data.email:
                     self.page.locator('input[name="email"]').fill(client_data.email)
                     self.logger.info(f"  ✓ Filled email: {client_data.email}")
-                self.logger.info("✓ [STEP 5 COMPLETE] Policyholder info filled")
+                self.logger.info("✓ [STEP 4 COMPLETE] Policyholder info filled")
             except Exception as e:
-                raise ClaimTitanError(f"Failed at STEP 5 (filling policyholder fields): {e}")
+                raise ClaimTitanError(f"Failed at STEP 4 (filling policyholder fields): {e}")
 
-            # Click "Add a new address now" link to show address fields
-            current_step = "clicking 'Add a new address now' link"
-            self.logger.info(f"[STEP 6] Switching to new address mode...")
-            try:
-                new_address_link = self.page.locator('span.text-underline:has-text("Add a new address now")')
-                self._robust_click(new_address_link, "'Add a new address now' link")
-                self.page.wait_for_timeout(2000)
-            except Exception as e:
-                raise ClaimTitanError(f"Failed at STEP 6 (clicking 'Add a new address now'): {e}")
-
-            # Wait for street field to be visible
+            # Wait for address form fields to be visible (they're shown by default)
             current_step = "waiting for address form fields to appear"
-            self.logger.info(f"[STEP 7] Waiting for address form fields...")
+            self.logger.info(f"[STEP 5] Waiting for address form fields...")
             try:
                 street_field = self.page.locator('input[name="street"]')
                 street_field.wait_for(state='visible', timeout=10000)
-                self.logger.info("✓ [STEP 7 COMPLETE] New address form displayed")
+                self.logger.info("✓ [STEP 5 COMPLETE] Address form fields visible")
             except Exception as e:
-                raise ClaimTitanError(f"Failed at STEP 7 (waiting for address form, specifically input[name='street']): {e}")
+                raise ClaimTitanError(f"Failed at STEP 5 (waiting for address form, specifically input[name='street']): {e}")
 
             # Fill address information
             current_step = "filling address information"
-            self.logger.info(f"[STEP 8] Filling address information...")
+            self.logger.info(f"[STEP 6] Filling address information...")
             try:
                 self.page.locator('input[name="street"]').fill(client_data.street_address)
                 self.logger.info(f"  ✓ Filled street: {client_data.street_address}")
@@ -414,13 +394,13 @@ class ClaimTitanBot:
                 self.page.locator('input[name="zip"]').fill(client_data.zipcode)
                 self.logger.info(f"  ✓ Filled zip: {client_data.zipcode}")
 
-                self.logger.info("✓ [STEP 8 COMPLETE] Address info filled")
+                self.logger.info("✓ [STEP 6 COMPLETE] Address info filled")
             except Exception as e:
-                raise ClaimTitanError(f"Failed at STEP 8 (filling address fields): {e}")
+                raise ClaimTitanError(f"Failed at STEP 6 (filling address fields): {e}")
 
             # Fill optional claim information if available
             current_step = "filling optional claim information"
-            self.logger.info(f"[STEP 9] Filling optional claim information...")
+            self.logger.info(f"[STEP 7] Filling optional claim information...")
             try:
                 if client_data.claim_number:
                     self.page.locator('input[name="claim_number"]').fill(client_data.claim_number)
@@ -472,25 +452,25 @@ class ClaimTitanBot:
                         self.page.locator('select[name="loss_type"]').select_option(loss_value)
                         self.logger.info(f"  ✓ Selected loss type: {client_data.loss_type}")
 
-                self.logger.info("✓ [STEP 9 COMPLETE] Optional claim info filled")
+                self.logger.info("✓ [STEP 7 COMPLETE] Optional claim info filled")
             except Exception as e:
-                raise ClaimTitanError(f"Failed at STEP 9 (filling claim info fields): {e}")
+                raise ClaimTitanError(f"Failed at STEP 7 (filling claim info fields): {e}")
 
             # Fill insurance company if available (on Insurance tab)
             if client_data.insurance_company:
                 current_step = "clicking Insurance tab"
-                self.logger.info(f"[STEP 10] Switching to Insurance tab...")
+                self.logger.info(f"[STEP 8] Switching to Insurance tab...")
                 try:
                     insurance_tab = self.page.locator('button.nav-item:has-text("Insurance")')
                     self._robust_click(insurance_tab, "Insurance tab")
                     self.page.wait_for_timeout(1000)
-                    self.logger.info("✓ [STEP 10 COMPLETE] On Insurance tab")
+                    self.logger.info("✓ [STEP 8 COMPLETE] On Insurance tab")
                 except Exception as e:
-                    raise ClaimTitanError(f"Failed at STEP 10 (clicking Insurance tab, button.nav-item:has-text('Insurance')): {e}")
+                    raise ClaimTitanError(f"Failed at STEP 8 (clicking Insurance tab, button.nav-item:has-text('Insurance')): {e}")
 
                 # Search for existing insurance company first
                 current_step = "searching for insurance company"
-                self.logger.info(f"[STEP 11] Searching for insurance company: {client_data.insurance_company}")
+                self.logger.info(f"[STEP 9] Searching for insurance company: {client_data.insurance_company}")
                 try:
                     search_input = self.page.locator('input[placeholder="Search Providers..."]')
                     search_input.wait_for(state='visible', timeout=10000)
@@ -508,47 +488,53 @@ class ClaimTitanBot:
                         self.logger.info(f"✓ Found {result_count} insurance company match(es)")
                         first_result = results_list.first
                         first_result.click()
-                        self.logger.info(f"✓ [STEP 11 COMPLETE] Selected existing insurance company")
+                        self.logger.info(f"✓ [STEP 9 COMPLETE] Selected existing insurance company")
                     else:
-                        # No results found - need to add new
-                        self.logger.info("No existing insurance company found, adding new...")
+                        # No results found - check if we need to add new via link or if field is already visible
+                        self.logger.info("No existing insurance company found, checking for add new option...")
 
                         # Clear search box first
                         search_input.clear()
                         self.page.wait_for_timeout(500)
 
-                        # Click "Add a new provider now"
+                        # Check if "Add a new provider now" link exists
                         new_insurance_link = self.page.locator('span.text-underline:has-text("Add a new provider now")')
-                        self._robust_click(new_insurance_link, "'Add a new provider now' link")
-                        self.page.wait_for_timeout(1000)
+                        if new_insurance_link.is_visible(timeout=2000):
+                            self.logger.info("  Found 'Add a new provider now' link, clicking...")
+                            self._robust_click(new_insurance_link, "'Add a new provider now' link")
+                            self.page.wait_for_timeout(1000)
+                        else:
+                            self.logger.info("  'Add a new provider now' link not found - field may already be visible")
 
-                        # Fill new insurance company form
-                        self.page.locator('input[name="insurance_name"]').fill(client_data.insurance_company)
+                        # Fill new insurance company form (field should be visible either way)
+                        insurance_name_field = self.page.locator('input[name="insurance_name"]')
+                        insurance_name_field.wait_for(state='visible', timeout=5000)
+                        insurance_name_field.fill(client_data.insurance_company)
                         self.logger.info(f"  ✓ Filled new insurance company: {client_data.insurance_company}")
-                        self.logger.info(f"✓ [STEP 11 COMPLETE] Created new insurance company")
+                        self.logger.info(f"✓ [STEP 9 COMPLETE] Created new insurance company")
 
                 except Exception as e:
-                    raise ClaimTitanError(f"Failed at STEP 11 (searching/adding insurance company): {e}")
+                    raise ClaimTitanError(f"Failed at STEP 9 (searching/adding insurance company): {e}")
 
             # Submit the form
             current_step = "clicking Save button to submit form"
-            self.logger.info(f"[STEP 12] Submitting claim creation form...")
+            self.logger.info(f"[STEP 10] Submitting claim creation form...")
             try:
                 submit_button = self.page.locator('button[type="submit"].is-primary:has-text("Save")')
                 self._robust_click(submit_button, "Save button")
-                self.logger.info("✓ [STEP 12 COMPLETE] Clicked Save button")
+                self.logger.info("✓ [STEP 10 COMPLETE] Clicked Save button")
             except Exception as e:
-                raise ClaimTitanError(f"Failed at STEP 12 (clicking Save button, button[type='submit'].is-primary:has-text('Save')): {e}")
+                raise ClaimTitanError(f"Failed at STEP 10 (clicking Save button, button[type='submit'].is-primary:has-text('Save')): {e}")
 
             # Wait for form submission and redirect
             current_step = "waiting for form submission to complete"
-            self.logger.info(f"[STEP 13] Waiting for form submission and redirect...")
+            self.logger.info(f"[STEP 11] Waiting for form submission and redirect...")
             try:
                 self.page.wait_for_load_state('networkidle', timeout=30000)
                 self.page.wait_for_timeout(2000)
-                self.logger.info("✓ [STEP 13 COMPLETE] Form submitted, page loaded")
+                self.logger.info("✓ [STEP 11 COMPLETE] Form submitted, page loaded")
             except Exception as e:
-                raise ClaimTitanError(f"Failed at STEP 13 (waiting for form submission to complete): {e}")
+                raise ClaimTitanError(f"Failed at STEP 11 (waiting for form submission to complete): {e}")
 
             # Get the URL of the created claim
             claim_url = self.page.url
