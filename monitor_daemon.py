@@ -36,6 +36,102 @@ logger = logging.getLogger(__name__)
 running = True
 
 
+def extract_contact_info_from_email(email_content: str) -> dict:
+    """
+    Extract contact information from email body.
+    Looks for phone (9+ digits), email (@ sign), and name.
+    Handles various formats like:
+    - "Contact info: Name, email, phone"
+    - "Contact:\nName\nemail\nphone"
+    - "claim contact: Name / email / phone"
+
+    Args:
+        email_content: Email body text
+
+    Returns:
+        Dict with 'phone', 'email', 'first_name', 'last_name' (or None if not found)
+    """
+    import re
+
+    result = {
+        'phone': None,
+        'email': None,
+        'first_name': None,
+        'last_name': None
+    }
+
+    # Look for contact section with flexible matching
+    contact_patterns = [
+        r'(?:claim\s*)?contact\s*(?:info)?[:\s]+(.+?)(?:\n\n|\Z)',  # "contact:" or "claim contact:" followed by content
+        r'(?:claim\s*)?contact[:\s]+(.+?)(?:\n\n|\Z)',  # More flexible
+    ]
+
+    contact_text = None
+    for pattern in contact_patterns:
+        match = re.search(pattern, email_content, re.IGNORECASE | re.DOTALL)
+        if match:
+            contact_text = match.group(1).strip()
+            break
+
+    # If no contact section found, search entire email
+    if not contact_text:
+        contact_text = email_content
+
+    # Split by common separators (newlines, commas, slashes)
+    contact_lines = re.split(r'[\n,/]+', contact_text)
+
+    # Extract phone
+    phone_patterns = [
+        r'\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}',  # US phone with various formats
+        r'\d{10,}',  # Any sequence of 10+ digits
+    ]
+
+    for line in contact_lines:
+        for pattern in phone_patterns:
+            match = re.search(pattern, line)
+            if match:
+                phone = re.sub(r'\D', '', match.group())
+                if len(phone) >= 9:
+                    # Format as (XXX) XXX-XXXX if 10 digits
+                    if len(phone) == 10:
+                        result['phone'] = f"({phone[:3]}) {phone[3:6]}-{phone[6:]}"
+                    else:
+                        result['phone'] = phone
+                    break
+        if result['phone']:
+            break
+
+    # Extract email (line with @)
+    for line in contact_lines:
+        if '@' in line:
+            # Extract email address
+            email_match = re.search(r'[\w\.-]+@[\w\.-]+\.\w+', line)
+            if email_match:
+                result['email'] = email_match.group()
+                break
+
+    # Extract name (text line that's not phone or email)
+    for line in contact_lines:
+        # Skip if it's the phone or email line
+        if result['phone'] and result['phone'].replace('(', '').replace(')', '').replace(' ', '').replace('-', '') in line.replace(' ', '').replace('-', ''):
+            continue
+        if result['email'] and result['email'] in line:
+            continue
+
+        # Check if line looks like a name (letters, spaces, maybe hyphen)
+        if re.match(r'^[A-Za-z\s\-]+$', line):
+            # Split into first and last name
+            name_parts = line.split()
+            if len(name_parts) >= 2:
+                result['first_name'] = name_parts[0]
+                result['last_name'] = ' '.join(name_parts[1:])
+            elif len(name_parts) == 1:
+                result['first_name'] = name_parts[0]
+            break
+
+    return result
+
+
 def signal_handler(signum, frame):
     """Handle shutdown signals gracefully."""
     global running
@@ -96,10 +192,13 @@ def main():
 
                     for email_data in emails:
                         # Check if this is a contract email (new client)
-                        is_contract_email = "contract" in email_data.subject.lower()
+                        # Look for trigger words in subject line
+                        subject_lower = email_data.subject.lower()
+                        contract_triggers = ["contract", "new claim", "new client", "new customer", "new policy"]
+                        is_contract_email = any(trigger in subject_lower for trigger in contract_triggers)
 
                         if is_contract_email:
-                            logger.info(f"\n  📄 CONTRACT EMAIL DETECTED")
+                            logger.info(f"\n  📄 NEW CLIENT EMAIL DETECTED")
                         else:
                             logger.info(f"\n  Claim #{email_data.claim_number}")
 
@@ -131,6 +230,25 @@ def main():
                                 logger.info(f"  Parsing contract with Claude AI...")
                                 parser = ContractParser()
                                 client_data = parser.parse_contract(pdf_attachment.file_path)
+
+                                # Extract contact info from email body (takes priority over contract)
+                                logger.info(f"  Extracting contact info from email body...")
+                                email_contact = extract_contact_info_from_email(email_data.email_content)
+
+                                # Override contract data with email data (email takes priority)
+                                if email_contact['phone']:
+                                    logger.info(f"  ✓ Phone from email: {email_contact['phone']}")
+                                    client_data.phone = email_contact['phone']
+
+                                if email_contact['email']:
+                                    logger.info(f"  ✓ Email from email: {email_contact['email']}")
+                                    client_data.email = email_contact['email']
+
+                                if email_contact['first_name']:
+                                    logger.info(f"  ✓ Name from email: {email_contact['first_name']} {email_contact['last_name'] or ''}")
+                                    client_data.first_name = email_contact['first_name']
+                                    if email_contact['last_name']:
+                                        client_data.last_name = email_contact['last_name']
 
                                 client_name = f"{client_data.first_name} {client_data.last_name or ''}".strip()
                                 logger.info(f"\n  " + "="*70)
