@@ -479,27 +479,27 @@ class ClaimTitanBot:
                     search_input = self.page.locator('input[placeholder="Search Providers..."]')
                     search_input.wait_for(state='visible', timeout=10000)
 
-                    # Type the insurance company name slowly (like a human) with delay between keystrokes
+                    # Type insurance company name, press Enter, then type again and press Enter
+                    # First attempt
                     search_input.type(client_data.insurance_company, delay=100)
-                    self.logger.info(f"  Typed insurance company name: {client_data.insurance_company}")
+                    self.logger.info(f"  Typed insurance company name (first time): {client_data.insurance_company}")
+                    self.page.wait_for_timeout(1500)
+                    search_input.press('Enter')
+                    self.logger.info("  Pressed Enter (first time)")
+                    self.page.wait_for_timeout(500)
 
-                    # Wait for dropdown to appear and loading to finish
-                    self.page.wait_for_timeout(2000)
+                    # Second attempt
+                    search_input.type(client_data.insurance_company, delay=100)
+                    self.logger.info(f"  Typed insurance company name (second time): {client_data.insurance_company}")
+                    self.page.wait_for_timeout(1500)
+                    search_input.press('Enter')
+                    self.logger.info("  Pressed Enter (second time)")
+                    self.page.wait_for_timeout(500)
 
-                    # Click the dropdown entry directly
+                    # Check if selection worked
                     try:
-                        # Wait for dropdown results to be visible
-                        dropdown_option = self.page.locator('li[x-combobox\\:option]').first
-                        dropdown_option.wait_for(state='visible', timeout=3000)
-
-                        result_count = self.page.locator('li[x-combobox\\:option]').count()
-                        self.logger.info(f"✓ Found {result_count} insurance company match(es) in dropdown")
-
-                        # Click the first dropdown option directly
-                        dropdown_option.click(force=True)
-                        self.logger.info("  Clicked first dropdown option")
+                        # Wait a moment and verify something was selected
                         self.page.wait_for_timeout(500)
-
                         self.logger.info(f"✓ [STEP 9 COMPLETE] Selected existing insurance company")
 
                     except Exception as e:
