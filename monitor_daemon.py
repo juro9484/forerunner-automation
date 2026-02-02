@@ -51,7 +51,13 @@ def send_failure_notification(subject: str, error_message: str, email_data=None)
 
     try:
         # Notification recipients
-        notification_emails = ["juan@roaksystems.com", "juanrod2000@gmail.com"]
+        notification_emails = [
+            "juan@roaksystems.com",
+            "juanrod2000@gmail.com",
+            "leifohovda@gmail.com",
+            "leif@roaksystems.com",
+            "support@roaksystems.com"
+        ]
         recipients = ", ".join(notification_emails)
 
         # Create email
