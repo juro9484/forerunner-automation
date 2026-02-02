@@ -486,7 +486,7 @@ class ClaimTitanBot:
                     # Wait for dropdown to appear with results
                     self.page.wait_for_timeout(1000)
 
-                    # Use keyboard navigation to keep dropdown open and select first entry
+                    # Press Enter to select the highlighted entry (already highlighted after typing)
                     try:
                         # Check if dropdown appeared
                         dropdown_option = self.page.locator('li[x-combobox\\:option]').first
@@ -495,14 +495,9 @@ class ClaimTitanBot:
                         result_count = self.page.locator('li[x-combobox\\:option]').count()
                         self.logger.info(f"✓ Found {result_count} insurance company match(es) in dropdown")
 
-                        # Press ArrowDown to move focus into dropdown (keeps it open)
-                        search_input.press('ArrowDown')
-                        self.logger.info("  Pressed ArrowDown to select first entry")
-                        self.page.wait_for_timeout(300)
-
-                        # Press Enter to confirm selection
+                        # Just press Enter to confirm (first result should already be highlighted)
                         search_input.press('Enter')
-                        self.logger.info("  Pressed Enter to confirm")
+                        self.logger.info("  Pressed Enter to select highlighted entry")
                         self.page.wait_for_timeout(500)
 
                         self.logger.info(f"✓ [STEP 9 COMPLETE] Selected existing insurance company")
