@@ -192,9 +192,9 @@ def main():
 
                     for email_data in emails:
                         # Check if this is a contract email (new client)
-                        # Look for trigger words in subject line
+                        # Look for trigger words in subject line (case-insensitive)
                         subject_lower = email_data.subject.lower()
-                        contract_triggers = ["contract", "new claim", "new client", "new customer", "new policy"]
+                        contract_triggers = ["contract", "new contract", "new claim", "new client", "new customer", "new policy"]
                         is_contract_email = any(trigger in subject_lower for trigger in contract_triggers)
 
                         if is_contract_email:
