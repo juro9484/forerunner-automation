@@ -534,11 +534,34 @@ class ClaimTitanBot:
             current_step = "clicking Save button to submit form"
             self.logger.info(f"[STEP 10] Submitting claim creation form...")
             try:
-                submit_button = self.page.locator('button[type="submit"].is-primary:has-text("Save")')
-                self._robust_click(submit_button, "Save button")
-                self.logger.info("✓ [STEP 10 COMPLETE] Clicked Save button")
+                # Wait a moment for any UI updates after insurance company selection
+                self.page.wait_for_timeout(1000)
+
+                # Try multiple selectors for the Save button
+                submit_button = None
+                selectors_to_try = [
+                    'button[type="submit"].is-primary:has-text("Save")',
+                    'button[type="submit"]:has-text("Save")',
+                    'button.is-primary:has-text("Save")',
+                    'button:has-text("Save")',
+                ]
+
+                for selector in selectors_to_try:
+                    try:
+                        submit_button = self.page.locator(selector).first
+                        submit_button.wait_for(state='visible', timeout=5000)
+                        self.logger.info(f"  Found Save button with selector: {selector}")
+                        break
+                    except:
+                        continue
+
+                if submit_button:
+                    self._robust_click(submit_button, "Save button")
+                    self.logger.info("✓ [STEP 10 COMPLETE] Clicked Save button")
+                else:
+                    raise ClaimTitanError("Could not find Save button with any selector")
             except Exception as e:
-                raise ClaimTitanError(f"Failed at STEP 10 (clicking Save button, button[type='submit'].is-primary:has-text('Save')): {e}")
+                raise ClaimTitanError(f"Failed at STEP 10 (clicking Save button): {e}")
 
             # Wait for form submission and redirect
             current_step = "waiting for form submission to complete"
