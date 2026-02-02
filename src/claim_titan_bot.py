@@ -484,20 +484,25 @@ class ClaimTitanBot:
                     self.logger.info(f"  Typed insurance company name: {client_data.insurance_company}")
 
                     # Wait for dropdown to appear with results
-                    self.page.wait_for_timeout(2000)
+                    self.page.wait_for_timeout(1500)
 
-                    # Try to click the dropdown entry
+                    # Use keyboard navigation to keep dropdown open and select first entry
                     try:
-                        # Look for the dropdown option with the insurance company name
+                        # Check if dropdown appeared
                         dropdown_option = self.page.locator('li[x-combobox\\:option]').first
-                        dropdown_option.wait_for(state='visible', timeout=3000)
+                        dropdown_option.wait_for(state='visible', timeout=2000)
 
                         result_count = self.page.locator('li[x-combobox\\:option]').count()
                         self.logger.info(f"✓ Found {result_count} insurance company match(es) in dropdown")
 
-                        # Click the first dropdown option
-                        dropdown_option.click()
-                        self.logger.info("  Clicked dropdown entry")
+                        # Press ArrowDown to move focus into dropdown (keeps it open)
+                        search_input.press('ArrowDown')
+                        self.logger.info("  Pressed ArrowDown to select first entry")
+                        self.page.wait_for_timeout(300)
+
+                        # Press Enter to confirm selection
+                        search_input.press('Enter')
+                        self.logger.info("  Pressed Enter to confirm")
                         self.page.wait_for_timeout(500)
 
                         self.logger.info(f"✓ [STEP 9 COMPLETE] Selected existing insurance company")
