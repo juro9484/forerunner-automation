@@ -306,132 +306,132 @@ def main():
                         else:
                             # ===== EXISTING CLAIM WORKFLOW: Summarize and post note =====
                             try:
-                            logger.info(f"  Generating AI summary...")
-                            summary = summarizer.summarize_email(email_data)
+                                logger.info(f"  Generating AI summary...")
+                                summary = summarizer.summarize_email(email_data)
 
-                            # Log the summary in CRM format
-                            logger.info(f"\n  " + "="*70)
-                            logger.info(f"  CLAIM TITAN NOTE - Claim #{email_data.claim_number}")
-                            logger.info(f"  " + "="*70)
-                            for line in summarizer.format_for_crm(summary).split('\n'):
-                                logger.info(f"  {line}")
-                            logger.info(f"  " + "="*70)
-                            logger.info(f"  Model: {summary.model_used}")
-                            logger.info(f"  Generated: {summary.timestamp.strftime('%Y-%m-%d %H:%M:%S')}")
-                            logger.info(f"  " + "="*70 + "\n")
+                                # Log the summary in CRM format
+                                logger.info(f"\n  " + "="*70)
+                                logger.info(f"  CLAIM TITAN NOTE - Claim #{email_data.claim_number}")
+                                logger.info(f"  " + "="*70)
+                                for line in summarizer.format_for_crm(summary).split('\n'):
+                                    logger.info(f"  {line}")
+                                logger.info(f"  " + "="*70)
+                                logger.info(f"  Model: {summary.model_used}")
+                                logger.info(f"  Generated: {summary.timestamp.strftime('%Y-%m-%d %H:%M:%S')}")
+                                logger.info(f"  " + "="*70 + "\n")
 
-                            # Post to Claim Titan CRM (open browser for this email only)
-                            bot = None
-                            try:
-                                logger.info(f"  Opening browser and logging into Claim Titan...")
-                                bot = ClaimTitanBot()
-                                bot.connect()
-                                logger.info(f"  ✓ Browser opened and logged in")
+                                # Post to Claim Titan CRM (open browser for this email only)
+                                bot = None
+                                try:
+                                    logger.info(f"  Opening browser and logging into Claim Titan...")
+                                    bot = ClaimTitanBot()
+                                    bot.connect()
+                                    logger.info(f"  ✓ Browser opened and logged in")
 
-                                logger.info(f"  Posting note to Claim Titan...")
-                                result = bot.post_note(
-                                    claim_number=summary.claim_number,
-                                    title=summary.title,
-                                    description=summary.description
-                                )
+                                    logger.info(f"  Posting note to Claim Titan...")
+                                    result = bot.post_note(
+                                        claim_number=summary.claim_number,
+                                        title=summary.title,
+                                        description=summary.description
+                                    )
 
-                                if result.success:
-                                    logger.info(f"  ✓ Posted to Claim Titan successfully")
-                                else:
-                                    logger.error(f"  ✗ Failed to post to Claim Titan: {result.error_message}")
-                                    if result.screenshot_path:
-                                        logger.error(f"  Screenshot: {result.screenshot_path}")
+                                    if result.success:
+                                        logger.info(f"  ✓ Posted to Claim Titan successfully")
+                                    else:
+                                        logger.error(f"  ✗ Failed to post to Claim Titan: {result.error_message}")
+                                        if result.screenshot_path:
+                                            logger.error(f"  Screenshot: {result.screenshot_path}")
 
-                                # Handle attachments if any (while browser is still open)
-                                if email_data.attachments and bot:
-                                    try:
-                                        logger.info(f"  Processing {len(email_data.attachments)} attachment(s)...")
+                                    # Handle attachments if any (while browser is still open)
+                                    if email_data.attachments and bot:
+                                        try:
+                                            logger.info(f"  Processing {len(email_data.attachments)} attachment(s)...")
 
-                                        # Upload attachments (or log in test mode)
-                                        # Returns dict mapping filename -> folder_name (or "Failed" if failed)
-                                        upload_results = bot.upload_attachments(
-                                            attachments=email_data.attachments,
-                                            claim_number=email_data.claim_number,
-                                            email_summary=summary.description
-                                        )
+                                            # Upload attachments (or log in test mode)
+                                            # Returns dict mapping filename -> folder_name (or "Failed" if failed)
+                                            upload_results = bot.upload_attachments(
+                                                attachments=email_data.attachments,
+                                                claim_number=email_data.claim_number,
+                                                email_summary=summary.description
+                                            )
 
-                                        # Save attachment metadata to database
-                                        for attachment in email_data.attachments:
-                                            filename = attachment.filename
-                                            folder = upload_results.get(filename, "Unknown")
+                                            # Save attachment metadata to database
+                                            for attachment in email_data.attachments:
+                                                filename = attachment.filename
+                                                folder = upload_results.get(filename, "Unknown")
 
-                                            # Determine if upload was successful
-                                            uploaded = folder not in ["Failed", "Unknown"]
+                                                # Determine if upload was successful
+                                                uploaded = folder not in ["Failed", "Unknown"]
 
-                                            # Move to permanent storage
-                                            try:
-                                                permanent_path = bot.attachment_handler.move_to_permanent_storage(
-                                                    attachment=attachment,
-                                                    claim_number=email_data.claim_number,
-                                                    folder_name=folder if folder not in ["Failed", "Unknown"] else "Other"
-                                                )
+                                                # Move to permanent storage
+                                                try:
+                                                    permanent_path = bot.attachment_handler.move_to_permanent_storage(
+                                                        attachment=attachment,
+                                                        claim_number=email_data.claim_number,
+                                                        folder_name=folder if folder not in ["Failed", "Unknown"] else "Other"
+                                                    )
 
-                                                # Save to database
-                                                monitor.db.save_attachment(
-                                                    email_id=email_data.email_id,
-                                                    claim_number=email_data.claim_number,
-                                                    original_filename=attachment.filename,
-                                                    saved_filename=permanent_path.split('/')[-1],
-                                                    file_path=permanent_path,
-                                                    file_size=attachment.file_size,
-                                                    content_type=attachment.content_type,
-                                                    category=attachment.category,
-                                                    ai_description=attachment.description,
-                                                    crm_folder=folder if folder not in ["Failed", "Unknown"] else None,
-                                                    uploaded_to_crm=uploaded
-                                                )
+                                                    # Save to database
+                                                    monitor.db.save_attachment(
+                                                        email_id=email_data.email_id,
+                                                        claim_number=email_data.claim_number,
+                                                        original_filename=attachment.filename,
+                                                        saved_filename=permanent_path.split('/')[-1],
+                                                        file_path=permanent_path,
+                                                        file_size=attachment.file_size,
+                                                        content_type=attachment.content_type,
+                                                        category=attachment.category,
+                                                        ai_description=attachment.description,
+                                                        crm_folder=folder if folder not in ["Failed", "Unknown"] else None,
+                                                        uploaded_to_crm=uploaded
+                                                    )
 
-                                                logger.info(f"  ✓ Saved {filename} to {permanent_path}")
+                                                    logger.info(f"  ✓ Saved {filename} to {permanent_path}")
 
-                                            except Exception as e:
-                                                logger.error(f"  ✗ Error saving {filename}: {e}")
+                                                except Exception as e:
+                                                    logger.error(f"  ✗ Error saving {filename}: {e}")
 
-                                        logger.info(f"  ✓ Processed all attachments")
+                                            logger.info(f"  ✓ Processed all attachments")
 
-                                    except Exception as e:
-                                        logger.error(f"  ✗ Error processing attachments: {e}")
-                                        logger.error(f"  Attachments not uploaded, but will continue processing")
+                                        except Exception as e:
+                                            logger.error(f"  ✗ Error processing attachments: {e}")
+                                            logger.error(f"  Attachments not uploaded, but will continue processing")
 
-                            except ClaimTitanError as e:
-                                logger.error(f"  ✗ Claim Titan error: {e}")
-                                logger.error(f"  Note was not posted to CRM, but will continue processing")
+                                except ClaimTitanError as e:
+                                    logger.error(f"  ✗ Claim Titan error: {e}")
+                                    logger.error(f"  Note was not posted to CRM, but will continue processing")
+
+                                except Exception as e:
+                                    logger.error(f"  ✗ Unexpected error posting to Claim Titan: {e}")
+                                    logger.error(f"  Note was not posted to CRM, but will continue processing")
+
+                                finally:
+                                    # Always close browser after posting (or if error)
+                                    if bot:
+                                        try:
+                                            bot.disconnect()
+                                            logger.info(f"  ✓ Browser closed")
+                                        except Exception as e:
+                                            logger.warning(f"  Error closing browser: {e}")
+
+                                # Mark as processed in database
+                                monitor.mark_email_processed(email_data, status="success")
+
+                                # Mark as read in email (only after success)
+                                monitor.mark_as_read(email_data.email_id)
+
+                                total_emails_processed += 1
+                                logger.info(f"  ✓ Processed successfully")
+
+                            except SummarizerError as e:
+                                logger.error(f"  ✗ Summarization failed: {e}")
+                                monitor.mark_email_processed(email_data, status="failed", error_message=str(e))
+                                logger.info(f"  Email marked as failed in database")
 
                             except Exception as e:
-                                logger.error(f"  ✗ Unexpected error posting to Claim Titan: {e}")
-                                logger.error(f"  Note was not posted to CRM, but will continue processing")
-
-                            finally:
-                                # Always close browser after posting (or if error)
-                                if bot:
-                                    try:
-                                        bot.disconnect()
-                                        logger.info(f"  ✓ Browser closed")
-                                    except Exception as e:
-                                        logger.warning(f"  Error closing browser: {e}")
-
-                            # Mark as processed in database
-                            monitor.mark_email_processed(email_data, status="success")
-
-                            # Mark as read in email (only after success)
-                            monitor.mark_as_read(email_data.email_id)
-
-                            total_emails_processed += 1
-                            logger.info(f"  ✓ Processed successfully")
-
-                        except SummarizerError as e:
-                            logger.error(f"  ✗ Summarization failed: {e}")
-                            monitor.mark_email_processed(email_data, status="failed", error_message=str(e))
-                            logger.info(f"  Email marked as failed in database")
-
-                        except Exception as e:
-                            logger.error(f"  ✗ Unexpected error during processing: {e}", exc_info=True)
-                            monitor.mark_email_processed(email_data, status="failed", error_message=str(e))
-                            logger.info(f"  Email marked as failed in database")
+                                logger.error(f"  ✗ Unexpected error during processing: {e}", exc_info=True)
+                                monitor.mark_email_processed(email_data, status="failed", error_message=str(e))
+                                logger.info(f"  Email marked as failed in database")
 
                 else:
                     logger.info("No new emails with claim numbers")
