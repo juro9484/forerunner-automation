@@ -36,6 +36,74 @@ logger = logging.getLogger(__name__)
 running = True
 
 
+def send_failure_notification(subject: str, error_message: str, email_data=None):
+    """
+    Send email notification when processing fails.
+
+    Args:
+        subject: Notification subject
+        error_message: Error details
+        email_data: Optional email data for context
+    """
+    import smtplib
+    from email.mime.text import MIMEText
+    from email.mime.multipart import MIMEMultipart
+
+    try:
+        # Notification recipients
+        notification_emails = ["juan@roaksystems.com", "juanrod2000@gmail.com"]
+        recipients = ", ".join(notification_emails)
+
+        # Create email
+        msg = MIMEMultipart()
+        msg['From'] = Config.BOT_EMAIL_USER
+        msg['To'] = recipients
+        msg['Subject'] = f"🚨 Forerunner Automation Alert: {subject}"
+
+        # Build email body
+        body = f"""
+Forerunner Claims Automation Alert
+{'='*60}
+
+ERROR: {subject}
+
+Details:
+{error_message}
+
+"""
+
+        if email_data:
+            body += f"""
+Email Context:
+- From: {email_data.sender}
+- Subject: {email_data.subject}
+- Claim #: {email_data.claim_number if hasattr(email_data, 'claim_number') else 'N/A'}
+- Email ID: {email_data.email_id}
+
+"""
+
+        body += f"""
+Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+Please check the logs for more details.
+
+{'='*60}
+Forerunner Claims Automation System
+"""
+
+        msg.attach(MIMEText(body, 'plain'))
+
+        # Send email
+        with smtplib.SMTP_SSL(Config.BOT_EMAIL_IMAP_SERVER.replace('imap.', 'smtp.'), 465) as server:
+            server.login(Config.BOT_EMAIL_USER, Config.BOT_EMAIL_PASS)
+            server.send_message(msg)
+
+        logger.info(f"✓ Sent failure notification to {recipients}")
+
+    except Exception as e:
+        logger.error(f"Failed to send notification email: {e}")
+
+
 def extract_contact_info_from_email(email_content: str) -> dict:
     """
     Extract contact information from email body.
@@ -286,9 +354,23 @@ def main():
                                             logger.error(f"  Screenshot: {result.screenshot_path}")
                                         monitor.mark_email_processed(email_data, status="failed", error_message=result.error_message)
 
+                                        # Send failure notification
+                                        send_failure_notification(
+                                            subject="Claim Creation Failed",
+                                            error_message=f"Failed to create claim for {client_name}:\n{result.error_message}\nScreenshot: {result.screenshot_path or 'N/A'}",
+                                            email_data=email_data
+                                        )
+
                                 except Exception as e:
                                     logger.error(f"  ✗ Error creating claim: {e}", exc_info=True)
                                     monitor.mark_email_processed(email_data, status="failed", error_message=str(e))
+
+                                    # Send failure notification
+                                    send_failure_notification(
+                                        subject="Claim Creation Error",
+                                        error_message=f"Unexpected error creating claim for {client_name}:\n{str(e)}",
+                                        email_data=email_data
+                                    )
 
                                 finally:
                                     if bot:
@@ -299,9 +381,23 @@ def main():
                                 logger.error(f"  ✗ Contract parsing failed: {e}")
                                 monitor.mark_email_processed(email_data, status="failed", error_message=str(e))
 
+                                # Send failure notification
+                                send_failure_notification(
+                                    subject="Contract Parsing Failed",
+                                    error_message=f"Failed to parse contract PDF:\n{str(e)}",
+                                    email_data=email_data
+                                )
+
                             except Exception as e:
                                 logger.error(f"  ✗ Unexpected error during contract processing: {e}", exc_info=True)
                                 monitor.mark_email_processed(email_data, status="failed", error_message=str(e))
+
+                                # Send failure notification
+                                send_failure_notification(
+                                    subject="Contract Processing Failed - Unexpected Error",
+                                    error_message=f"Unexpected error during contract processing:\n{str(e)}",
+                                    email_data=email_data
+                                )
 
                         else:
                             # ===== EXISTING CLAIM WORKFLOW: Summarize and post note =====
@@ -401,9 +497,23 @@ def main():
                                     logger.error(f"  ✗ Claim Titan error: {e}")
                                     logger.error(f"  Note was not posted to CRM, but will continue processing")
 
+                                    # Send failure notification
+                                    send_failure_notification(
+                                        subject="Note Posting Failed - Claim Titan Error",
+                                        error_message=f"Failed to post note for claim #{email_data.claim_number}:\n{str(e)}",
+                                        email_data=email_data
+                                    )
+
                                 except Exception as e:
                                     logger.error(f"  ✗ Unexpected error posting to Claim Titan: {e}")
                                     logger.error(f"  Note was not posted to CRM, but will continue processing")
+
+                                    # Send failure notification
+                                    send_failure_notification(
+                                        subject="Note Posting Failed - Unexpected Error",
+                                        error_message=f"Unexpected error posting note for claim #{email_data.claim_number}:\n{str(e)}",
+                                        email_data=email_data
+                                    )
 
                                 finally:
                                     # Always close browser after posting (or if error)
@@ -428,10 +538,24 @@ def main():
                                 monitor.mark_email_processed(email_data, status="failed", error_message=str(e))
                                 logger.info(f"  Email marked as failed in database")
 
+                                # Send failure notification
+                                send_failure_notification(
+                                    subject="Email Summarization Failed",
+                                    error_message=f"Failed to generate AI summary for claim #{email_data.claim_number}:\n{str(e)}",
+                                    email_data=email_data
+                                )
+
                             except Exception as e:
                                 logger.error(f"  ✗ Unexpected error during processing: {e}", exc_info=True)
                                 monitor.mark_email_processed(email_data, status="failed", error_message=str(e))
                                 logger.info(f"  Email marked as failed in database")
+
+                                # Send failure notification
+                                send_failure_notification(
+                                    subject="Claim Processing Failed - Unexpected Error",
+                                    error_message=f"Unexpected error processing claim #{email_data.claim_number}:\n{str(e)}",
+                                    email_data=email_data
+                                )
 
                 else:
                     logger.info("No new emails with claim numbers")
