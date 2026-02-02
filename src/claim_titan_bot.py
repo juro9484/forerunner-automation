@@ -481,10 +481,15 @@ class ClaimTitanBot:
                     search_input.fill(client_data.insurance_company)
                     self.logger.info(f"  Typed insurance company name: {client_data.insurance_company}")
 
-                    # Wait for dropdown to appear with debounced search results
-                    self.page.wait_for_timeout(1500)
+                    # Click the dropdown button to show filtered results
+                    dropdown_button = self.page.locator('button[x-combobox\\:button]')
+                    dropdown_button.click()
+                    self.logger.info("  Clicked dropdown button to show results")
 
-                    # Try keyboard navigation: Down arrow to select first result, then Enter
+                    # Wait for dropdown to open
+                    self.page.wait_for_timeout(800)
+
+                    # Try to find and click dropdown result
                     try:
                         # Check if dropdown results exist
                         dropdown_results = self.page.locator('li[x-combobox\\:option]')
@@ -492,14 +497,9 @@ class ClaimTitanBot:
                         result_count = dropdown_results.count()
                         self.logger.info(f"✓ Found {result_count} insurance company match(es) in dropdown")
 
-                        # Press Down arrow to navigate to first result
-                        search_input.press('ArrowDown')
-                        self.logger.info("  Pressed Down arrow to select first result")
-                        self.page.wait_for_timeout(300)
-
-                        # Press Enter to select
-                        search_input.press('Enter')
-                        self.logger.info("  Pressed Enter to confirm selection")
+                        # Click the first result
+                        dropdown_results.first.click()
+                        self.logger.info("  Clicked first dropdown result")
                         self.page.wait_for_timeout(500)
 
                         self.logger.info(f"✓ [STEP 9 COMPLETE] Selected existing insurance company")
