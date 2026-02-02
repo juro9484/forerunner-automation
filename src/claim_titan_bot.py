@@ -479,31 +479,26 @@ class ClaimTitanBot:
                     search_input = self.page.locator('input[placeholder="Search Providers..."]')
                     search_input.wait_for(state='visible', timeout=10000)
                     search_input.fill(client_data.insurance_company)
+                    self.logger.info(f"  Typed insurance company name: {client_data.insurance_company}")
 
-                    # Wait for dropdown results to appear
-                    self.logger.info("  Waiting for search results dropdown...")
-                    try:
-                        # Wait for at least one result to be visible in the dropdown
-                        first_result = self.page.locator('li[x-combobox\\:option]').first
-                        first_result.wait_for(state='visible', timeout=5000)
+                    # Press Enter to select if found
+                    search_input.press('Enter')
+                    self.logger.info("  Pressed Enter")
 
-                        # Count all results
-                        results_list = self.page.locator('li[x-combobox\\:option]')
-                        result_count = results_list.count()
+                    # Wait for UI to process the selection
+                    self.page.wait_for_timeout(1000)
 
-                        # Found matches - click on the first one
-                        self.logger.info(f"✓ Found {result_count} insurance company match(es)")
-                        first_result.click(timeout=5000)
-                        # Wait for dropdown to close and selection to be processed
-                        self.page.wait_for_timeout(500)
+                    # Check if field still has text (means insurance was found and selected)
+                    field_value = search_input.input_value()
+                    self.logger.info(f"  Field value after Enter: '{field_value}'")
+
+                    if field_value and field_value.strip():
+                        # Field has text = existing insurance company was selected
+                        self.logger.info(f"✓ Selected existing insurance company: {field_value}")
                         self.logger.info(f"✓ [STEP 9 COMPLETE] Selected existing insurance company")
-                    except Exception:
-                        # No results found in dropdown - need to add new insurance company
-                        self.logger.info("No existing insurance company found, checking for add new option...")
-
-                        # Clear search box first
-                        search_input.clear()
-                        self.page.wait_for_timeout(500)
+                    else:
+                        # Field is empty = insurance company doesn't exist, need to add new one
+                        self.logger.info("No existing insurance company found, adding new one...")
 
                         # Check if "Add a new provider now" link exists
                         new_insurance_link = self.page.locator('span.text-underline:has-text("Add a new provider now")')
