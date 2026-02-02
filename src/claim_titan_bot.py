@@ -479,12 +479,12 @@ class ClaimTitanBot:
                     search_input = self.page.locator('input[placeholder="Search Providers..."]')
                     search_input.wait_for(state='visible', timeout=10000)
 
-                    # Type the insurance company name
-                    search_input.fill(client_data.insurance_company)
+                    # Type the insurance company name slowly (like a human) with delay between keystrokes
+                    search_input.type(client_data.insurance_company, delay=100)
                     self.logger.info(f"  Typed insurance company name: {client_data.insurance_company}")
 
                     # Wait for dropdown to appear with results
-                    self.page.wait_for_timeout(1500)
+                    self.page.wait_for_timeout(1000)
 
                     # Use keyboard navigation to keep dropdown open and select first entry
                     try:
