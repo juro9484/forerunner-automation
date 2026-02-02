@@ -478,21 +478,21 @@ class ClaimTitanBot:
                 try:
                     search_input = self.page.locator('input[placeholder="Search Providers..."]')
                     search_input.wait_for(state='visible', timeout=10000)
+
+                    # FIRST: Click the dropdown button to open it
+                    dropdown_button = self.page.locator('button[x-combobox\\:button]')
+                    dropdown_button.click()
+                    self.logger.info("  Clicked dropdown button to open it")
+                    self.page.wait_for_timeout(500)
+
+                    # SECOND: Type the insurance company name
                     search_input.fill(client_data.insurance_company)
                     self.logger.info(f"  Typed insurance company name: {client_data.insurance_company}")
 
-                    # Wait 4 seconds for input to settle before clicking dropdown button
-                    self.page.wait_for_timeout(4000)
+                    # Wait for filtered results to appear
+                    self.page.wait_for_timeout(1500)
 
-                    # Click the dropdown button to show filtered results
-                    dropdown_button = self.page.locator('button[x-combobox\\:button]')
-                    dropdown_button.click()
-                    self.logger.info("  Clicked dropdown button to show results")
-
-                    # Wait for dropdown to open
-                    self.page.wait_for_timeout(800)
-
-                    # Try to find and click dropdown result
+                    # THIRD: Try to find and click dropdown result
                     try:
                         # Check if dropdown results exist
                         dropdown_results = self.page.locator('li[x-combobox\\:option]')
