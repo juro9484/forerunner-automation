@@ -480,23 +480,25 @@ class ClaimTitanBot:
                     search_input.wait_for(state='visible', timeout=10000)
                     search_input.fill(client_data.insurance_company)
 
-                    # Wait for search results to load (debounced 250ms + network)
-                    self.page.wait_for_timeout(1500)
+                    # Wait for dropdown results to appear
+                    self.logger.info("  Waiting for search results dropdown...")
+                    try:
+                        # Wait for at least one result to be visible in the dropdown
+                        first_result = self.page.locator('li[x-combobox\\:option]').first
+                        first_result.wait_for(state='visible', timeout=5000)
 
-                    # Check if any results appeared
-                    results_list = self.page.locator('li[x-combobox\\:option]')
-                    result_count = results_list.count()
+                        # Count all results
+                        results_list = self.page.locator('li[x-combobox\\:option]')
+                        result_count = results_list.count()
 
-                    if result_count > 0:
                         # Found matches - click on the first one
                         self.logger.info(f"✓ Found {result_count} insurance company match(es)")
-                        first_result = results_list.first
                         first_result.click(timeout=5000)
                         # Wait for dropdown to close and selection to be processed
                         self.page.wait_for_timeout(500)
                         self.logger.info(f"✓ [STEP 9 COMPLETE] Selected existing insurance company")
-                    else:
-                        # No results found - check if we need to add new via link or if field is already visible
+                    except Exception:
+                        # No results found in dropdown - need to add new insurance company
                         self.logger.info("No existing insurance company found, checking for add new option...")
 
                         # Clear search box first
