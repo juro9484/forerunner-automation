@@ -479,44 +479,37 @@ class ClaimTitanBot:
                     search_input = self.page.locator('input[placeholder="Search Providers..."]')
                     search_input.wait_for(state='visible', timeout=10000)
 
-                    # FIRST: Click the dropdown button to open it
-                    dropdown_button = self.page.locator('button[x-combobox\\:button]')
-                    dropdown_button.click()
-                    self.logger.info("  Clicked dropdown button to open it")
-                    self.page.wait_for_timeout(500)
-
-                    # SECOND: Type the insurance company name
+                    # Type the insurance company name
                     search_input.fill(client_data.insurance_company)
                     self.logger.info(f"  Typed insurance company name: {client_data.insurance_company}")
 
-                    # Wait for filtered results to appear
-                    self.page.wait_for_timeout(1500)
+                    # Wait for dropdown to appear with results
+                    self.page.wait_for_timeout(2000)
 
-                    # THIRD: Try to find and click dropdown result
+                    # Try to click the dropdown entry
                     try:
-                        # Check if dropdown results exist
-                        dropdown_results = self.page.locator('li[x-combobox\\:option]')
-                        dropdown_results.first.wait_for(state='visible', timeout=3000)
-                        result_count = dropdown_results.count()
+                        # Look for the dropdown option with the insurance company name
+                        dropdown_option = self.page.locator('li[x-combobox\\:option]').first
+                        dropdown_option.wait_for(state='visible', timeout=3000)
+
+                        result_count = self.page.locator('li[x-combobox\\:option]').count()
                         self.logger.info(f"✓ Found {result_count} insurance company match(es) in dropdown")
 
-                        # Click the first result
-                        dropdown_results.first.click()
-                        self.logger.info("  Clicked first dropdown result")
+                        # Click the first dropdown option
+                        dropdown_option.click()
+                        self.logger.info("  Clicked dropdown entry")
                         self.page.wait_for_timeout(500)
 
                         self.logger.info(f"✓ [STEP 9 COMPLETE] Selected existing insurance company")
 
                     except Exception as e:
                         # No dropdown results found = insurance company doesn't exist
-                        self.logger.info(f"No existing insurance company found in dropdown: {e}")
+                        self.logger.info(f"No dropdown entry found: {e}")
                         self.logger.info("Adding new insurance company...")
 
-                        # Clear search box if needed
-                        current_value = search_input.input_value()
-                        if current_value:
-                            search_input.clear()
-                            self.page.wait_for_timeout(500)
+                        # Clear search box
+                        search_input.clear()
+                        self.page.wait_for_timeout(500)
 
                         # Check if "Add a new provider now" link exists
                         new_insurance_link = self.page.locator('span.text-underline:has-text("Add a new provider now")')
