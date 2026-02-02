@@ -534,32 +534,22 @@ class ClaimTitanBot:
             current_step = "clicking Save button to submit form"
             self.logger.info(f"[STEP 10] Submitting claim creation form...")
             try:
-                # Wait a moment for any UI updates after insurance company selection
-                self.page.wait_for_timeout(1000)
+                # Wait for slideover footer to fully appear after insurance selection
+                self.logger.info("  Waiting for slideover footer to be ready...")
+                self.page.wait_for_timeout(2000)
 
-                # Try multiple selectors for the Save button
-                submit_button = None
-                selectors_to_try = [
-                    'button[type="submit"].is-primary:has-text("Save")',
-                    'button[type="submit"]:has-text("Save")',
-                    'button.is-primary:has-text("Save")',
-                    'button:has-text("Save")',
-                ]
+                # Look for Save button in slideover footer
+                submit_button = self.page.locator('.slideover-footer button[type="submit"]:has-text("Save")').first
+                submit_button.wait_for(state='visible', timeout=10000)
+                self.logger.info("  Found Save button in slideover footer")
 
-                for selector in selectors_to_try:
-                    try:
-                        submit_button = self.page.locator(selector).first
-                        submit_button.wait_for(state='visible', timeout=5000)
-                        self.logger.info(f"  Found Save button with selector: {selector}")
-                        break
-                    except:
-                        continue
+                # Scroll into view to ensure it's clickable
+                submit_button.scroll_into_view_if_needed()
+                self.page.wait_for_timeout(300)
 
-                if submit_button:
-                    self._robust_click(submit_button, "Save button")
-                    self.logger.info("✓ [STEP 10 COMPLETE] Clicked Save button")
-                else:
-                    raise ClaimTitanError("Could not find Save button with any selector")
+                # Click the button
+                self._robust_click(submit_button, "Save button")
+                self.logger.info("✓ [STEP 10 COMPLETE] Clicked Save button")
             except Exception as e:
                 raise ClaimTitanError(f"Failed at STEP 10 (clicking Save button): {e}")
 
