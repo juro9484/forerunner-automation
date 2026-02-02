@@ -481,6 +481,9 @@ class ClaimTitanBot:
                     search_input.fill(client_data.insurance_company)
                     self.logger.info(f"  Typed insurance company name: {client_data.insurance_company}")
 
+                    # Wait 4 seconds for input to settle before clicking dropdown button
+                    self.page.wait_for_timeout(4000)
+
                     # Click the dropdown button to show filtered results
                     dropdown_button = self.page.locator('button[x-combobox\\:button]')
                     dropdown_button.click()
