@@ -28,21 +28,37 @@ def reset_failed_emails(days_back=7):
     """
     db_path = "email_processing.db"
 
+    # Check if database exists and has tables
+    if not Path(db_path).exists() or Path(db_path).stat().st_size == 0:
+        print(f"❌ ERROR: Database '{db_path}' doesn't exist or is empty.")
+        print("The monitor daemon needs to run at least once to initialize the database.")
+        print("Please start the monitor daemon first.")
+        return
+
     # Connect to database
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
+
+    # Verify the table exists
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='processed_emails'")
+    if not cursor.fetchone():
+        print(f"❌ ERROR: Table 'processed_emails' doesn't exist in database.")
+        print("The monitor daemon needs to run at least once to initialize the database schema.")
+        print("Please start the monitor daemon first.")
+        conn.close()
+        return
 
     print(f"Checking emails from the last {days_back} days...\n")
 
     # Find emails marked as 'success' in the last N days
     cutoff_date = datetime.now() - timedelta(days=days_back)
     cursor.execute("""
-        SELECT email_id, claim_number, sender, subject, received_at, status
-        FROM emails
+        SELECT email_id, claim_number, sender, subject, received_timestamp, status
+        FROM processed_emails
         WHERE status = 'success'
-        AND received_at >= ?
-        ORDER BY received_at DESC
+        AND received_timestamp >= ?
+        ORDER BY received_timestamp DESC
     """, (cutoff_date.isoformat(),))
 
     success_emails = cursor.fetchall()
@@ -73,7 +89,7 @@ def reset_failed_emails(days_back=7):
             print(f"   Claim #: {email['claim_number']}")
             print(f"   From: {email['sender']}")
             print(f"   Subject: {email['subject'][:60]}...")
-            print(f"   Received: {email['received_at']}")
+            print(f"   Received: {email['received_timestamp']}")
             print(f"   Failed attempts:")
             for attempt in attempts:
                 print(f"     - {attempt['attempt_type']}: {attempt['error_message']}")
@@ -96,8 +112,8 @@ def reset_failed_emails(days_back=7):
     print("\nResetting emails in database...")
     for email in emails_to_reset:
         cursor.execute("""
-            UPDATE emails
-            SET status = 'pending', processed_at = NULL
+            UPDATE processed_emails
+            SET status = 'pending', processed_timestamp = NULL
             WHERE email_id = ?
         """, (email['email_id'],))
         print(f"  ✓ Reset email {email['email_id']} to 'pending'")
