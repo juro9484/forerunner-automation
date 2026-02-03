@@ -19,6 +19,8 @@ from summarizer import EmailSummarizer, SummarizerError
 from claim_titan_bot import ClaimTitanBot, ClaimTitanError, ClaimCreationResult
 from contract_parser import ContractParser, ContractParserError
 from config import Config
+from metrics_tracker import MetricsTracker
+from health_checker import HealthChecker
 
 # Configure logging
 logging.basicConfig(
@@ -274,6 +276,13 @@ def main():
     check_count = 0
     total_emails_processed = 0
 
+    # Initialize metrics tracker and health checker
+    metrics = MetricsTracker()
+    health = HealthChecker()
+
+    logger.info("✓ Metrics tracker initialized")
+    logger.info("✓ Health checker initialized")
+
     # Initialize summarizer once
     try:
         summarizer = EmailSummarizer()
@@ -290,6 +299,14 @@ def main():
     while running:
         check_count += 1
         logger.info(f"\n[Check #{check_count}] Starting email check at {datetime.now()}")
+
+        # Reset daily metrics if new day
+        metrics.reset_daily()
+
+        # Record check start for health monitoring
+        health.record_check_start()
+
+        check_had_errors = False
 
         try:
             # Connect and check emails
@@ -387,6 +404,9 @@ def main():
                                         logger.info(f"  ✓ Created claim successfully!")
                                         logger.info(f"  ✓ Claim URL: {result.claim_url}")
 
+                                        # METRICS: Record successful claim creation
+                                        metrics.record_claim_created(success=True)
+
                                         # ATOMIC: Mark in DB and mark as read (maintains consistency)
                                         if not monitor.mark_email_fully_processed(email_data, status="success"):
                                             logger.error(f"  ⚠️  Database consistency error - sending alert")
@@ -401,6 +421,10 @@ def main():
                                         logger.error(f"  ✗ Failed to create claim: {result.error_message}")
                                         if result.screenshot_path:
                                             logger.error(f"  Screenshot: {result.screenshot_path}")
+
+                                        # METRICS: Record failed claim creation
+                                        metrics.record_claim_created(success=False)
+
                                         monitor.mark_email_processed(email_data, status="failed", error_message=result.error_message)
 
                                         # Send failure notification
@@ -409,6 +433,7 @@ def main():
                                             error_message=f"Failed to create claim for {client_name}:\n{result.error_message}\nScreenshot: {result.screenshot_path or 'N/A'}",
                                             email_data=email_data
                                         )
+                                        check_had_errors = True
 
                                 except Exception as e:
                                     logger.error(f"  ✗ Error creating claim: {e}", exc_info=True)
@@ -482,10 +507,15 @@ def main():
 
                                     if result.success:
                                         logger.info(f"  ✓ Posted to Claim Titan successfully")
+                                        # METRICS: Record successful note posting
+                                        metrics.record_note_posted(success=True)
                                     else:
                                         logger.error(f"  ✗ Failed to post to Claim Titan: {result.error_message}")
                                         if result.screenshot_path:
                                             logger.error(f"  Screenshot: {result.screenshot_path}")
+                                        # METRICS: Record failed note posting
+                                        metrics.record_note_posted(success=False)
+                                        check_had_errors = True
 
                                     # Handle attachments if any (while browser is still open)
                                     if email_data.attachments and bot:
@@ -615,13 +645,55 @@ def main():
         except EmailMonitorError as e:
             logger.error(f"✗ Email monitoring error: {e}")
             logger.info("Will retry on next check...")
+            check_had_errors = True
+            health.record_check_failure(f"Email monitoring error: {str(e)}")
 
         except Exception as e:
             logger.error(f"✗ Unexpected error: {e}", exc_info=True)
             logger.info("Will retry on next check...")
+            check_had_errors = True
+            health.record_check_failure(f"Unexpected error: {str(e)}")
+
+        # Record successful check if no errors
+        if not check_had_errors:
+            health.record_check_success(emails_processed=len(emails) if 'emails' in locals() and emails else 0)
+
+        # Check for health alerts
+        health_alert = health.should_alert()
+        if health_alert:
+            logger.error(f"⚠️  HEALTH ALERT: {health_alert}")
+            send_failure_notification(
+                subject="System Health Alert",
+                error_message=health_alert,
+                email_data=None
+            )
+
+        # Check SLA compliance
+        success_rate = metrics.get_success_rate()
+        if metrics.metrics["successful"] + metrics.metrics["failed"] >= 10:  # Need at least 10 data points
+            if success_rate < 95.0:
+                logger.warning(f"⚠️  SLA WARNING: Success rate is {success_rate:.1f}% (target: 95%)")
+
+                # Only alert once when crossing threshold (not every check)
+                if not hasattr(main, '_sla_alerted') or not main._sla_alerted:
+                    send_failure_notification(
+                        subject="SLA Violation - Success Rate Below 95%",
+                        error_message=f"Current success rate: {success_rate:.1f}%\n"
+                                    f"Successful: {metrics.metrics['successful']}\n"
+                                    f"Failed: {metrics.metrics['failed']}\n"
+                                    f"Target: 95%",
+                        email_data=None
+                    )
+                    main._sla_alerted = True
+            else:
+                # Reset alert flag when back above threshold
+                if hasattr(main, '_sla_alerted'):
+                    main._sla_alerted = False
 
         # Summary
         logger.info(f"\n[Check #{check_count}] Complete. Total processed: {total_emails_processed}")
+        logger.info(f"Session success rate: {success_rate:.1f}%")
+        logger.info(f"Health status: {health.health['status']}")
 
         # Wait before next check (or exit if shutdown requested)
         if running:

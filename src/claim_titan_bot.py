@@ -252,19 +252,83 @@ class ClaimTitanBot:
         except Exception as e:
             raise LoginError(f"Login failed: {e}")
 
-    def post_note(self, claim_number: str, title: str, description: str) -> ClaimTitanResult:
+    def post_note(self, claim_number: str, title: str, description: str, timeout_minutes: int = 5) -> ClaimTitanResult:
         """
-        Post a note to a claim in Claim Titan.
+        Post a note to a claim in Claim Titan with timeout protection.
 
         Args:
             claim_number: Claim number to search for (may have hyphens)
+            title: Note title
+            description: Note description
+            timeout_minutes: Maximum time allowed for operation (default 5 minutes)
+
+        Returns:
+            ClaimTitanResult with success status and details
+        """
+        import threading
+
+        self.logger.info(f"Posting note to claim {claim_number} (timeout: {timeout_minutes} min)")
+
+        # Container for thread result
+        result_container = [None]
+        exception_container = [None]
+
+        def worker():
+            """Worker thread that posts the note."""
+            try:
+                result_container[0] = self._post_note_impl(claim_number, title, description)
+            except Exception as e:
+                exception_container[0] = e
+
+        # Start worker thread
+        thread = threading.Thread(target=worker, daemon=True)
+        thread.start()
+
+        # Wait with timeout
+        thread.join(timeout=timeout_minutes * 60)
+
+        # Check if thread finished
+        if thread.is_alive():
+            # DEADLOCK DETECTED
+            self.logger.error(
+                f"❌ DEADLOCK: post_note hung for {timeout_minutes} minutes on claim {claim_number}"
+            )
+
+            # Force close browser to kill hung operation
+            try:
+                self.disconnect()
+                self.logger.warning("Force-closed browser due to deadlock")
+            except Exception as e:
+                self.logger.error(f"Error force-closing browser: {e}")
+
+            return ClaimTitanResult(
+                claim_number=claim_number,
+                note_title=title,
+                note_description=description,
+                success=False,
+                timestamp=datetime.now(),
+                error_message=f"Operation timed out after {timeout_minutes} minutes (deadlock detected)"
+            )
+
+        # Check for exception in worker thread
+        if exception_container[0]:
+            raise exception_container[0]
+
+        return result_container[0]
+
+    def _post_note_impl(self, claim_number: str, title: str, description: str) -> ClaimTitanResult:
+        """
+        Internal implementation of post_note (called by worker thread).
+
+        Args:
+            claim_number: Claim number to search for
             title: Note title
             description: Note description
 
         Returns:
             ClaimTitanResult with success status and details
         """
-        self.logger.info(f"Posting note to claim {claim_number}")
+        self.logger.info(f"[Internal] Posting note to claim {claim_number}")
 
         try:
             # Search for claim (tries with/without hyphens)
@@ -303,12 +367,13 @@ class ClaimTitanBot:
                 screenshot_path=screenshot_path
             )
 
-    def create_claim(self, client_data) -> ClaimCreationResult:
+    def create_claim(self, client_data, timeout_minutes: int = 10) -> ClaimCreationResult:
         """
-        Create a new claim in Claim Titan from contract data.
+        Create a new claim in Claim Titan from contract data with timeout protection.
 
         Args:
             client_data: ClientData object with client and property information
+            timeout_minutes: Maximum time allowed for operation (default 10 minutes)
 
         Returns:
             ClaimCreationResult with success status and claim URL
@@ -316,8 +381,79 @@ class ClaimTitanBot:
         Raises:
             ClaimTitanError: If claim creation fails
         """
+        import threading
+
         client_name = f"{client_data.first_name} {client_data.last_name or ''}".strip()
-        self.logger.info(f"Creating new claim for client: {client_name}")
+        self.logger.info(f"Creating new claim for client: {client_name} (timeout: {timeout_minutes} min)")
+
+        # Container for thread result
+        result_container = [None]
+        exception_container = [None]
+
+        def worker():
+            """Worker thread that creates the claim."""
+            try:
+                result_container[0] = self._create_claim_impl(client_data)
+            except Exception as e:
+                exception_container[0] = e
+
+        # Start worker thread
+        thread = threading.Thread(target=worker, daemon=True)
+        thread.start()
+
+        # Wait with timeout
+        thread.join(timeout=timeout_minutes * 60)
+
+        # Check if thread finished
+        if thread.is_alive():
+            # DEADLOCK DETECTED
+            self.logger.error(
+                f"❌ DEADLOCK: create_claim hung for {timeout_minutes} minutes for {client_name}"
+            )
+
+            # Force close browser to kill hung operation
+            try:
+                self.disconnect()
+                self.logger.warning("Force-closed browser due to deadlock")
+            except Exception as e:
+                self.logger.error(f"Error force-closing browser: {e}")
+
+            return ClaimCreationResult(
+                client_name=client_name,
+                claim_url=None,
+                success=False,
+                timestamp=datetime.now(),
+                error_message=f"Operation timed out after {timeout_minutes} minutes (deadlock detected)"
+            )
+
+        # Check for exception in worker thread
+        if exception_container[0]:
+            # Return the exception result (not raise, since it's already handled)
+            if isinstance(result_container[0], ClaimCreationResult):
+                return result_container[0]
+            # If no result, create error result
+            return ClaimCreationResult(
+                client_name=client_name,
+                claim_url=None,
+                success=False,
+                timestamp=datetime.now(),
+                error_message=str(exception_container[0])
+            )
+
+        return result_container[0]
+
+    def _create_claim_impl(self, client_data) -> ClaimCreationResult:
+        """
+        Internal implementation of create_claim (called by worker thread).
+
+        Args:
+            client_data: ClientData object with client and property information
+
+        Returns:
+            ClaimCreationResult with success status and claim URL
+        """
+        client_name = f"{client_data.first_name} {client_data.last_name or ''}".strip()
+        self.logger.info(f"[Internal] Creating new claim for client: {client_name}")
 
         current_step = "initialization"
         try:
