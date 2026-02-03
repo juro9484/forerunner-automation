@@ -566,6 +566,35 @@ class ClaimTitanBot:
             # Get the URL of the created claim
             claim_url = self.page.url
 
+            # VALIDATE: Ensure we got a real claim URL, not the list page
+            current_step = "validating claim URL"
+            self.logger.info(f"[STEP 12] Validating claim URL...")
+            try:
+                if not "/claims/" in claim_url or claim_url.endswith("/claims") or claim_url.endswith("/claims/"):
+                    raise ClaimTitanError(
+                        f"Invalid claim URL after creation: {claim_url}. "
+                        "Expected URL with /claims/[id], but got list page instead. "
+                        "Claim may have been created but URL is incorrect."
+                    )
+
+                # Extract and validate claim ID
+                import re
+                claim_id_match = re.search(r'/claims/(\d+)', claim_url)
+                if not claim_id_match:
+                    raise ClaimTitanError(
+                        f"Cannot extract claim ID from URL: {claim_url}. "
+                        "Expected format: https://claimtitan.com/claims/[number]"
+                    )
+
+                claim_id = claim_id_match.group(1)
+                self.logger.info(f"  ✓ Claim created with ID: {claim_id}")
+                self.logger.info(f"  ✓ Valid claim URL: {claim_url}")
+                self.logger.info("✓ [STEP 12 COMPLETE] Claim URL validated")
+
+            except ClaimTitanError as e:
+                # URL validation failed
+                raise e
+
             self.logger.info(f"✓ Successfully created claim for {client_name}")
             self.logger.info(f"✓ Claim URL: {claim_url}")
 

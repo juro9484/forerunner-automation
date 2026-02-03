@@ -478,6 +478,56 @@ class EmailMonitor:
             self.logger.error(f"Error marking email as processed in database: {e}")
             return False
 
+    def mark_email_fully_processed(
+        self,
+        email_data: EmailData,
+        status: str = "success",
+        error_message: Optional[str] = None,
+    ) -> bool:
+        """
+        ATOMIC operation: Mark email as processed in DB AND mark as read in IMAP.
+        If either operation fails, rolls back both to maintain consistency.
+
+        Args:
+            email_data: EmailData object to mark as processed
+            status: Processing status ('success' or 'failed')
+            error_message: Optional error message if failed
+
+        Returns:
+            True if both operations succeeded, False otherwise
+        """
+        if not self.db:
+            # If no database, just mark as read
+            return self.mark_as_read(email_data.email_id)
+
+        try:
+            # STEP 1: Mark in database
+            db_success = self.mark_email_processed(email_data, status, error_message)
+
+            if not db_success:
+                raise Exception("Database write failed")
+
+            # STEP 2: Mark as read in email (only for successful processing)
+            if status == "success":
+                read_success = self.mark_as_read(email_data.email_id)
+
+                if not read_success:
+                    # CRITICAL: Database says processed but email still unread
+                    # ROLLBACK: Remove from database to force reprocessing
+                    self.logger.error(
+                        f"❌ CONSISTENCY ERROR: Email {email_data.email_id} marked in DB but failed to mark as read"
+                    )
+                    self.db.delete_processed(email_data.email_id)
+                    raise Exception("Failed to mark as read, rolled back database entry")
+
+            self.logger.info(f"✓ Email {email_data.email_id} fully processed (DB + IMAP)")
+            return True
+
+        except Exception as e:
+            self.logger.error(f"❌ ATOMIC PROCESSING FAILED: {e}")
+            # This error will be caught by caller who should send notification
+            return False
+
     def process_emails(self) -> List[EmailData]:
         """
         High-level method to fetch and process unread emails.

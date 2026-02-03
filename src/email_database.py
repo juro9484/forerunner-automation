@@ -249,6 +249,27 @@ class EmailDatabase:
             result = cursor.fetchone()
             return result["retry_count"] if result else 0
 
+    def delete_processed(self, email_id: str) -> bool:
+        """
+        Delete a processed email record (used for rollback in consistency errors).
+
+        Args:
+            email_id: Unique email identifier
+
+        Returns:
+            True if deleted, False if not found
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "DELETE FROM processed_emails WHERE email_id = ?",
+                (email_id,),
+            )
+            deleted = cursor.rowcount > 0
+            if deleted:
+                self.logger.warning(f"Rolled back database entry for email {email_id}")
+            return deleted
+
     def get_failed_emails(self, max_retries: int = 3) -> List[dict]:
         """
         Get emails that failed processing and haven't exceeded retry limit.

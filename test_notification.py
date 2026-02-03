@@ -20,7 +20,13 @@ def send_test_notification():
     """Send a test notification email."""
     try:
         # Notification recipients
-        notification_emails = ["juan@roaksystems.com", "juanrod2000@gmail.com"]
+        notification_emails = [
+            "juan@roaksystems.com",
+            "juanrod2000@gmail.com",
+            "leifohovda@gmail.com",
+            "leif@roaksystems.com",
+            "support@roaksystems.com"
+        ]
         recipients = ", ".join(notification_emails)
 
         # Create email

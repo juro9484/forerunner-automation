@@ -39,6 +39,7 @@ running = True
 def send_failure_notification(subject: str, error_message: str, email_data=None):
     """
     Send email notification when processing fails.
+    Includes escalation if email notification itself fails.
 
     Args:
         subject: Notification subject
@@ -108,7 +109,40 @@ Forerunner Claims Automation System
         logger.info(f"✓ Sent failure notification to {recipients}")
 
     except Exception as e:
-        logger.error(f"Failed to send notification email: {e}")
+        # CRITICAL: Email notification failed - ESCALATE
+        logger.error(f"❌ CRITICAL: Failed to send notification email: {e}")
+
+        # ESCALATION PATH 1: Write to critical errors file (monitored separately)
+        try:
+            critical_log_path = Path("logs/CRITICAL_FAILURES.log")
+            critical_log_path.parent.mkdir(parents=True, exist_ok=True)
+
+            with open(critical_log_path, 'a') as f:
+                f.write(f"\n{'='*80}\n")
+                f.write(f"[{datetime.now().isoformat()}] ⚠️  EMAIL NOTIFICATION FAILED\n")
+                f.write(f"{'='*80}\n")
+                f.write(f"Email Notification Error: {str(e)}\n")
+                f.write(f"Original Alert Subject: {subject}\n")
+                f.write(f"Original Error Message:\n{error_message}\n")
+                if email_data:
+                    f.write(f"\nEmail Context:\n")
+                    f.write(f"  - From: {email_data.sender}\n")
+                    f.write(f"  - Subject: {email_data.subject}\n")
+                    f.write(f"  - Email ID: {email_data.email_id}\n")
+                f.write(f"{'='*80}\n\n")
+
+            logger.error(f"✓ Escalation: Wrote to CRITICAL_FAILURES.log")
+        except Exception as log_error:
+            logger.error(f"❌ Failed to write to critical log: {log_error}")
+
+        # ESCALATION PATH 2: Write to console (for Windows service logs)
+        print(f"\n{'='*80}", file=sys.stderr)
+        print(f"⚠️  CRITICAL ALERT: EMAIL NOTIFICATION FAILED", file=sys.stderr)
+        print(f"{'='*80}", file=sys.stderr)
+        print(f"Subject: {subject}", file=sys.stderr)
+        print(f"Error: {error_message}", file=sys.stderr)
+        print(f"Notification Error: {e}", file=sys.stderr)
+        print(f"{'='*80}\n", file=sys.stderr)
 
 
 def extract_contact_info_from_email(email_content: str) -> dict:
@@ -352,9 +386,17 @@ def main():
                                     if result.success:
                                         logger.info(f"  ✓ Created claim successfully!")
                                         logger.info(f"  ✓ Claim URL: {result.claim_url}")
-                                        monitor.mark_email_processed(email_data, status="success")
-                                        monitor.mark_as_read(email_data.email_id)
-                                        total_emails_processed += 1
+
+                                        # ATOMIC: Mark in DB and mark as read (maintains consistency)
+                                        if not monitor.mark_email_fully_processed(email_data, status="success"):
+                                            logger.error(f"  ⚠️  Database consistency error - sending alert")
+                                            send_failure_notification(
+                                                subject="Database Consistency Error - Contract Email",
+                                                error_message=f"Email {email_data.email_id} may be reprocessed. Check logs.",
+                                                email_data=email_data
+                                            )
+                                        else:
+                                            total_emails_processed += 1
                                     else:
                                         logger.error(f"  ✗ Failed to create claim: {result.error_message}")
                                         if result.screenshot_path:
@@ -531,14 +573,17 @@ def main():
                                         except Exception as e:
                                             logger.warning(f"  Error closing browser: {e}")
 
-                                # Mark as processed in database
-                                monitor.mark_email_processed(email_data, status="success")
-
-                                # Mark as read in email (only after success)
-                                monitor.mark_as_read(email_data.email_id)
-
-                                total_emails_processed += 1
-                                logger.info(f"  ✓ Processed successfully")
+                                # ATOMIC: Mark as processed in DB and mark as read in IMAP
+                                if not monitor.mark_email_fully_processed(email_data, status="success"):
+                                    logger.error(f"  ⚠️  Database consistency error - sending alert")
+                                    send_failure_notification(
+                                        subject="Database Consistency Error - Note Posting",
+                                        error_message=f"Email {email_data.email_id} may be reprocessed. Check logs.",
+                                        email_data=email_data
+                                    )
+                                else:
+                                    total_emails_processed += 1
+                                    logger.info(f"  ✓ Processed successfully")
 
                             except SummarizerError as e:
                                 logger.error(f"  ✗ Summarization failed: {e}")
