@@ -16,7 +16,7 @@ sys.path.insert(0, str(Path(__file__).parent / "src"))
 
 from email_monitor import EmailMonitor, EmailMonitorError
 from summarizer import EmailSummarizer, SummarizerError
-from claim_titan_bot import ClaimTitanBot, ClaimTitanError, ClaimCreationResult
+from claim_titan_bot import ClaimTitanBot, ClaimTitanError, ClaimCreationResult, ClaimTitanResult
 from contract_parser import ContractParser, ContractParserError
 from config import Config
 from metrics_tracker import MetricsTracker
@@ -36,6 +36,46 @@ logger = logging.getLogger(__name__)
 
 # Global flag for graceful shutdown
 running = True
+
+
+def retry_with_backoff(func, max_retries=3, base_delay=5, operation_name="operation"):
+    """
+    Retry a function with exponential backoff.
+
+    Args:
+        func: Function to retry (should take no arguments or use lambda)
+        max_retries: Maximum number of attempts (default 3)
+        base_delay: Base delay in seconds (default 5)
+        operation_name: Name of operation for logging
+
+    Returns:
+        Result of func() if successful
+
+    Raises:
+        Last exception if all retries fail
+    """
+    last_exception = None
+
+    for attempt in range(max_retries):
+        try:
+            logger.info(f"  Attempt {attempt + 1}/{max_retries} for {operation_name}...")
+            result = func()
+            if attempt > 0:
+                logger.info(f"  ✓ {operation_name} succeeded after {attempt + 1} attempts")
+            return result
+
+        except Exception as e:
+            last_exception = e
+            if attempt < max_retries - 1:
+                delay = base_delay * (2 ** attempt)  # Exponential backoff: 5s, 10s, 20s
+                logger.warning(f"  ✗ {operation_name} failed (attempt {attempt + 1}): {str(e)}")
+                logger.info(f"  Retrying in {delay} seconds...")
+                time.sleep(delay)
+            else:
+                logger.error(f"  ✗ {operation_name} failed after {max_retries} attempts")
+
+    # All retries exhausted
+    raise last_exception
 
 
 def send_failure_notification(subject: str, error_message: str, email_data=None):
@@ -348,14 +388,30 @@ def main():
                                 if not pdf_attachment:
                                     logger.error(f"  ✗ No PDF attachment found in contract email")
                                     monitor.mark_email_processed(email_data, status="failed", error_message="No PDF attachment")
+
+                                    # NOTIFICATION: Alert team about missing PDF
+                                    send_failure_notification(
+                                        subject="Contract Email Missing PDF Attachment",
+                                        error_message=f"Contract email from {email_data.sender} has no PDF attachment.\n"
+                                                    f"Subject: {email_data.subject}\n"
+                                                    f"Cannot process without contract PDF.",
+                                        email_data=email_data
+                                    )
                                     continue
 
                                 logger.info(f"  ✓ Found PDF attachment: {pdf_attachment.filename}")
 
-                                # Parse contract with Claude
+                                # Parse contract with Claude (with retry logic)
                                 logger.info(f"  Parsing contract with Claude AI...")
                                 parser = ContractParser()
-                                client_data = parser.parse_contract(pdf_attachment.file_path)
+
+                                # RETRY: Claude API calls can fail transiently
+                                client_data = retry_with_backoff(
+                                    func=lambda: parser.parse_contract(pdf_attachment.file_path),
+                                    max_retries=3,
+                                    base_delay=5,
+                                    operation_name="contract parsing"
+                                )
 
                                 # Extract contact info from email body (takes priority over contract)
                                 logger.info(f"  Extracting contact info from email body...")
@@ -389,16 +445,48 @@ def main():
                                 logger.info(f"  Loss Date: {client_data.loss_date or '(not found)'}")
                                 logger.info(f"  " + "="*70 + "\n")
 
-                                # Create claim in Claim Titan
+                                # Create claim in Claim Titan (with duplicate prevention)
                                 bot = None
                                 try:
-                                    logger.info(f"  Opening browser and logging into Claim Titan...")
-                                    bot = ClaimTitanBot()
-                                    bot.connect()
-                                    logger.info(f"  ✓ Browser opened and logged in")
+                                    # CHECK: Have we already created this claim?
+                                    client_identifier = f"{client_data.first_name} {client_data.last_name or ''} - {client_data.street_address}".strip()
+                                    previous_attempt = monitor.db.get_processing_attempt(
+                                        email_id=email_data.email_id,
+                                        attempt_type="claim_creation",
+                                        client_identifier=client_identifier
+                                    )
 
-                                    logger.info(f"  Creating new claim in Claim Titan...")
-                                    result = bot.create_claim(client_data)
+                                    if previous_attempt and previous_attempt['success'] and previous_attempt['result_url']:
+                                        # We already created this claim successfully!
+                                        logger.info(f"  ✓ Claim already created (previous attempt): {previous_attempt['result_url']}")
+                                        logger.info(f"  Skipping duplicate creation")
+
+                                        # Use the previous result
+                                        result = ClaimCreationResult(
+                                            client_name=client_name,
+                                            claim_url=previous_attempt['result_url'],
+                                            success=True,
+                                            timestamp=datetime.now()
+                                        )
+                                    else:
+                                        # First attempt or previous attempt failed
+                                        logger.info(f"  Opening browser and logging into Claim Titan...")
+                                        bot = ClaimTitanBot()
+                                        bot.connect()
+                                        logger.info(f"  ✓ Browser opened and logged in")
+
+                                        logger.info(f"  Creating new claim in Claim Titan...")
+                                        result = bot.create_claim(client_data)
+
+                                        # Record this attempt in database
+                                        monitor.db.record_processing_attempt(
+                                            email_id=email_data.email_id,
+                                            attempt_type="claim_creation",
+                                            client_identifier=client_identifier,
+                                            success=result.success,
+                                            result_url=result.claim_url if result.success else None,
+                                            error_message=result.error_message if not result.success else None
+                                        )
 
                                     if result.success:
                                         logger.info(f"  ✓ Created claim successfully!")
@@ -477,7 +565,14 @@ def main():
                             # ===== EXISTING CLAIM WORKFLOW: Summarize and post note =====
                             try:
                                 logger.info(f"  Generating AI summary...")
-                                summary = summarizer.summarize_email(email_data)
+
+                                # RETRY: Claude API calls can fail transiently
+                                summary = retry_with_backoff(
+                                    func=lambda: summarizer.summarize_email(email_data),
+                                    max_retries=3,
+                                    base_delay=5,
+                                    operation_name="email summarization"
+                                )
 
                                 # Log the summary in CRM format
                                 logger.info(f"\n  " + "="*70)
@@ -490,20 +585,53 @@ def main():
                                 logger.info(f"  Generated: {summary.timestamp.strftime('%Y-%m-%d %H:%M:%S')}")
                                 logger.info(f"  " + "="*70 + "\n")
 
-                                # Post to Claim Titan CRM (open browser for this email only)
+                                # Post to Claim Titan CRM (open browser for this email only, with duplicate prevention)
                                 bot = None
                                 try:
-                                    logger.info(f"  Opening browser and logging into Claim Titan...")
-                                    bot = ClaimTitanBot()
-                                    bot.connect()
-                                    logger.info(f"  ✓ Browser opened and logged in")
-
-                                    logger.info(f"  Posting note to Claim Titan...")
-                                    result = bot.post_note(
-                                        claim_number=summary.claim_number,
-                                        title=summary.title,
-                                        description=summary.description
+                                    # CHECK: Have we already posted this note?
+                                    note_identifier = f"{summary.claim_number} - {summary.title[:50]}"  # Claim + truncated title
+                                    previous_attempt = monitor.db.get_processing_attempt(
+                                        email_id=email_data.email_id,
+                                        attempt_type="note_posting",
+                                        client_identifier=note_identifier
                                     )
+
+                                    if previous_attempt and previous_attempt['success']:
+                                        # We already posted this note successfully!
+                                        logger.info(f"  ✓ Note already posted (previous attempt)")
+                                        logger.info(f"  Skipping duplicate post")
+
+                                        # Create success result without reposting
+                                        result = ClaimTitanResult(
+                                            claim_number=summary.claim_number,
+                                            note_title=summary.title,
+                                            note_description=summary.description,
+                                            success=True,
+                                            timestamp=datetime.now()
+                                        )
+                                    else:
+                                        # First attempt or previous attempt failed
+                                        logger.info(f"  Opening browser and logging into Claim Titan...")
+                                        bot = ClaimTitanBot()
+                                        bot.connect()
+                                        logger.info(f"  ✓ Browser opened and logged in")
+
+                                        logger.info(f"  Posting note to Claim Titan...")
+                                        result = bot.post_note(
+                                            claim_number=summary.claim_number,
+                                            title=summary.title,
+                                            description=summary.description
+                                        )
+
+                                        # Record this attempt in database
+                                        monitor.db.record_processing_attempt(
+                                            email_id=email_data.email_id,
+                                            attempt_type="note_posting",
+                                            client_identifier=note_identifier,
+                                            success=result.success,
+                                            result_url=None,  # No URL for notes
+                                            error_message=result.error_message if not result.success else None
+                                        )
 
                                     if result.success:
                                         logger.info(f"  ✓ Posted to Claim Titan successfully")
@@ -571,6 +699,16 @@ def main():
                                         except Exception as e:
                                             logger.error(f"  ✗ Error processing attachments: {e}")
                                             logger.error(f"  Attachments not uploaded, but will continue processing")
+
+                                            # NOTIFICATION: Alert team about attachment failure
+                                            send_failure_notification(
+                                                subject="Attachment Upload Failed",
+                                                error_message=f"Failed to upload {len(email_data.attachments)} attachment(s) for claim #{email_data.claim_number}:\n"
+                                                            f"Error: {str(e)}\n"
+                                                            f"Attachments: {', '.join([a.filename for a in email_data.attachments])}\n"
+                                                            f"Note was posted but attachments failed.",
+                                                email_data=email_data
+                                            )
 
                                 except ClaimTitanError as e:
                                     logger.error(f"  ✗ Claim Titan error: {e}")

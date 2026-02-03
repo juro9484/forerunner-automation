@@ -131,6 +131,30 @@ class EmailDatabase:
             """
             )
 
+            # Processing attempts table (for duplicate prevention)
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS processing_attempts (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    email_id TEXT NOT NULL,
+                    attempt_type TEXT NOT NULL,
+                    client_identifier TEXT NOT NULL,
+                    attempt_time TEXT NOT NULL,
+                    success BOOLEAN DEFAULT 0,
+                    result_url TEXT,
+                    error_message TEXT,
+                    UNIQUE(email_id, attempt_type, client_identifier)
+                )
+            """
+            )
+
+            cursor.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_attempts_email_id
+                ON processing_attempts(email_id)
+            """
+            )
+
             self.logger.debug("Database schema initialized")
 
     def is_processed(self, email_id: str) -> bool:
@@ -513,6 +537,76 @@ class EmailDatabase:
             )
 
             return [dict(row) for row in cursor.fetchall()]
+
+    def get_processing_attempt(self, email_id: str, attempt_type: str, client_identifier: str) -> dict:
+        """
+        Get previous processing attempt to prevent duplicates.
+
+        Args:
+            email_id: Email identifier
+            attempt_type: Type of attempt ('claim_creation' or 'note_posting')
+            client_identifier: Unique identifier (e.g., "John Doe - 123 Main St" or claim number)
+
+        Returns:
+            Dict with attempt data if found, None otherwise
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+
+            cursor.execute(
+                """
+                SELECT * FROM processing_attempts
+                WHERE email_id = ? AND attempt_type = ? AND client_identifier = ?
+                ORDER BY attempt_time DESC
+                LIMIT 1
+            """,
+                (email_id, attempt_type, client_identifier),
+            )
+
+            result = cursor.fetchone()
+            return dict(result) if result else None
+
+    def record_processing_attempt(
+        self,
+        email_id: str,
+        attempt_type: str,
+        client_identifier: str,
+        success: bool,
+        result_url: str = None,
+        error_message: str = None
+    ) -> None:
+        """
+        Record a processing attempt for duplicate prevention.
+
+        Args:
+            email_id: Email identifier
+            attempt_type: Type of attempt ('claim_creation' or 'note_posting')
+            client_identifier: Unique identifier
+            success: Whether attempt succeeded
+            result_url: Result URL if successful (claim URL or note confirmation)
+            error_message: Error message if failed
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+
+            cursor.execute(
+                """
+                INSERT OR REPLACE INTO processing_attempts
+                (email_id, attempt_type, client_identifier, attempt_time, success, result_url, error_message)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+                (
+                    email_id,
+                    attempt_type,
+                    client_identifier,
+                    datetime.now().isoformat(),
+                    success,
+                    result_url,
+                    error_message,
+                ),
+            )
+
+            self.logger.info(f"Recorded {attempt_type} attempt for {client_identifier}: {'success' if success else 'failed'}")
 
 
 # Example usage

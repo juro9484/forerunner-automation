@@ -181,8 +181,30 @@ class ClaimTitanBot:
             self.page.set_default_timeout(30000)  # 30 seconds
             self.logger.info("DEBUG: Browser configured, starting login...")
 
-            # Login
-            self._login()
+            # Login with retry logic (network issues are common)
+            login_attempts = 3
+            login_successful = False
+
+            for attempt in range(login_attempts):
+                try:
+                    self.logger.info(f"DEBUG: Login attempt {attempt + 1}/{login_attempts}...")
+                    self._login()
+                    login_successful = True
+                    break  # Success, exit loop
+
+                except LoginError as e:
+                    if attempt < login_attempts - 1:
+                        wait_time = 5 * (2 ** attempt)  # 5s, 10s
+                        self.logger.warning(f"Login attempt {attempt + 1} failed: {e}")
+                        self.logger.info(f"Retrying login in {wait_time} seconds...")
+                        import time
+                        time.sleep(wait_time)
+                    else:
+                        # Final attempt failed
+                        raise
+
+            if not login_successful:
+                raise BrowserError("Login failed after multiple attempts")
 
             self.logger.info("✓ Connected and logged in successfully")
 
@@ -782,7 +804,8 @@ class ClaimTitanBot:
 
     def _search_claim(self, claim_number: str) -> str:
         """
-        Search for a claim by number, trying with and without hyphens.
+        Search for a claim by number with retry logic (claim might be indexing).
+        Tries with and without hyphens.
 
         Args:
             claim_number: Claim number to search for
@@ -791,38 +814,57 @@ class ClaimTitanBot:
             The claim number format that found results
 
         Raises:
-            SearchError: If claim not found
+            SearchError: If claim not found after retries
         """
         self.logger.info(f"Searching for claim: {claim_number}")
 
         search_box = self.page.locator('input[name="search"]')
 
-        # Try with original format first
-        search_box.clear()
-        search_box.fill(claim_number)
-        search_box.press('Enter')
-        self.page.wait_for_load_state('networkidle')
+        # RETRY LOGIC: Claim might be indexing, retry with delay
+        max_retries = 2
+        retry_delay = 30  # 30 seconds between retries
 
-        # Check if results found
-        if self._has_claim_results():
-            self.logger.info(f"✓ Found claim with format: {claim_number}")
-            return claim_number
+        for attempt in range(max_retries):
+            if attempt > 0:
+                self.logger.info(f"  Retry attempt {attempt + 1}/{max_retries} after {retry_delay}s delay (claim might be indexing)...")
+                import time
+                time.sleep(retry_delay)
 
-        # If no results and claim has hyphens, try without hyphens
-        if '-' in claim_number:
-            claim_no_hyphens = claim_number.replace('-', '')
-            self.logger.info(f"No results with hyphens, trying without: {claim_no_hyphens}")
-
+            # Try with original format first
             search_box.clear()
-            search_box.fill(claim_no_hyphens)
+            search_box.fill(claim_number)
             search_box.press('Enter')
             self.page.wait_for_load_state('networkidle')
 
+            # Check if results found
             if self._has_claim_results():
-                self.logger.info(f"✓ Found claim with format: {claim_no_hyphens}")
-                return claim_no_hyphens
+                if attempt > 0:
+                    self.logger.info(f"✓ Found claim with format: {claim_number} (after {attempt + 1} attempts)")
+                else:
+                    self.logger.info(f"✓ Found claim with format: {claim_number}")
+                return claim_number
 
-        raise SearchError(f"Claim {claim_number} not found (tried with and without hyphens)")
+            # If no results and claim has hyphens, try without hyphens
+            if '-' in claim_number:
+                claim_no_hyphens = claim_number.replace('-', '')
+                self.logger.info(f"  No results with hyphens, trying without: {claim_no_hyphens}")
+
+                search_box.clear()
+                search_box.fill(claim_no_hyphens)
+                search_box.press('Enter')
+                self.page.wait_for_load_state('networkidle')
+
+                if self._has_claim_results():
+                    if attempt > 0:
+                        self.logger.info(f"✓ Found claim with format: {claim_no_hyphens} (after {attempt + 1} attempts)")
+                    else:
+                        self.logger.info(f"✓ Found claim with format: {claim_no_hyphens}")
+                    return claim_no_hyphens
+
+            if attempt < max_retries - 1:
+                self.logger.warning(f"  Claim {claim_number} not found (attempt {attempt + 1}), will retry...")
+
+        raise SearchError(f"Claim {claim_number} not found after {max_retries} attempts (tried with and without hyphens)")
 
     def _has_claim_results(self) -> bool:
         """
