@@ -637,7 +637,73 @@ def main():
                                         logger.info(f"  ✓ Posted to Claim Titan successfully")
                                         # METRICS: Record successful note posting
                                         metrics.record_note_posted(success=True)
+
+                                        # Handle attachments if any (while browser is still open)
+                                        if email_data.attachments and bot:
+                                            try:
+                                                logger.info(f"  Processing {len(email_data.attachments)} attachment(s)...")
+
+                                                # Upload attachments (or log in test mode)
+                                                # Returns dict mapping filename -> folder_name (or "Failed" if failed)
+                                                upload_results = bot.upload_attachments(
+                                                    attachments=email_data.attachments,
+                                                    claim_number=email_data.claim_number,
+                                                    email_summary=summary.description
+                                                )
+
+                                                # Save attachment metadata to database
+                                                for attachment in email_data.attachments:
+                                                    filename = attachment.filename
+                                                    folder = upload_results.get(filename, "Unknown")
+
+                                                    # Determine if upload was successful
+                                                    uploaded = folder not in ["Failed", "Unknown"]
+
+                                                    # Move to permanent storage
+                                                    try:
+                                                        permanent_path = bot.attachment_handler.move_to_permanent_storage(
+                                                            attachment=attachment,
+                                                            claim_number=email_data.claim_number,
+                                                            folder_name=folder if folder not in ["Failed", "Unknown"] else "Other"
+                                                        )
+
+                                                        # Save to database
+                                                        monitor.db.save_attachment(
+                                                            email_id=email_data.email_id,
+                                                            claim_number=email_data.claim_number,
+                                                            original_filename=attachment.filename,
+                                                            saved_filename=permanent_path.split('/')[-1],
+                                                            file_path=permanent_path,
+                                                            file_size=attachment.file_size,
+                                                            content_type=attachment.content_type,
+                                                            category=attachment.category,
+                                                            ai_description=attachment.description,
+                                                            crm_folder=folder if folder not in ["Failed", "Unknown"] else None,
+                                                            uploaded_to_crm=uploaded
+                                                        )
+
+                                                        logger.info(f"  ✓ Saved {filename} to {permanent_path}")
+
+                                                    except Exception as e:
+                                                        logger.error(f"  ✗ Error saving {filename}: {e}")
+
+                                                logger.info(f"  ✓ Processed all attachments")
+
+                                            except Exception as e:
+                                                logger.error(f"  ✗ Error processing attachments: {e}")
+                                                logger.error(f"  Attachments not uploaded, but will continue processing")
+
+                                                # NOTIFICATION: Alert team about attachment failure
+                                                send_failure_notification(
+                                                    subject="Attachment Upload Failed",
+                                                    error_message=f"Failed to upload {len(email_data.attachments)} attachment(s) for claim #{email_data.claim_number}:\n"
+                                                                f"Error: {str(e)}\n"
+                                                                f"Attachments: {', '.join([a.filename for a in email_data.attachments])}\n"
+                                                                f"Note was posted but attachments failed.",
+                                                    email_data=email_data
+                                                )
                                     else:
+                                        # Note posting failed
                                         logger.error(f"  ✗ Failed to post to Claim Titan: {result.error_message}")
                                         if result.screenshot_path:
                                             logger.error(f"  Screenshot: {result.screenshot_path}")
@@ -645,70 +711,15 @@ def main():
                                         metrics.record_note_posted(success=False)
                                         check_had_errors = True
 
-                                    # Handle attachments if any (while browser is still open)
-                                    if email_data.attachments and bot:
-                                        try:
-                                            logger.info(f"  Processing {len(email_data.attachments)} attachment(s)...")
+                                        # Send failure notification
+                                        send_failure_notification(
+                                            subject="Note Posting Failed",
+                                            error_message=f"Failed to post note for claim #{email_data.claim_number}:\n{result.error_message}",
+                                            email_data=email_data
+                                        )
 
-                                            # Upload attachments (or log in test mode)
-                                            # Returns dict mapping filename -> folder_name (or "Failed" if failed)
-                                            upload_results = bot.upload_attachments(
-                                                attachments=email_data.attachments,
-                                                claim_number=email_data.claim_number,
-                                                email_summary=summary.description
-                                            )
-
-                                            # Save attachment metadata to database
-                                            for attachment in email_data.attachments:
-                                                filename = attachment.filename
-                                                folder = upload_results.get(filename, "Unknown")
-
-                                                # Determine if upload was successful
-                                                uploaded = folder not in ["Failed", "Unknown"]
-
-                                                # Move to permanent storage
-                                                try:
-                                                    permanent_path = bot.attachment_handler.move_to_permanent_storage(
-                                                        attachment=attachment,
-                                                        claim_number=email_data.claim_number,
-                                                        folder_name=folder if folder not in ["Failed", "Unknown"] else "Other"
-                                                    )
-
-                                                    # Save to database
-                                                    monitor.db.save_attachment(
-                                                        email_id=email_data.email_id,
-                                                        claim_number=email_data.claim_number,
-                                                        original_filename=attachment.filename,
-                                                        saved_filename=permanent_path.split('/')[-1],
-                                                        file_path=permanent_path,
-                                                        file_size=attachment.file_size,
-                                                        content_type=attachment.content_type,
-                                                        category=attachment.category,
-                                                        ai_description=attachment.description,
-                                                        crm_folder=folder if folder not in ["Failed", "Unknown"] else None,
-                                                        uploaded_to_crm=uploaded
-                                                    )
-
-                                                    logger.info(f"  ✓ Saved {filename} to {permanent_path}")
-
-                                                except Exception as e:
-                                                    logger.error(f"  ✗ Error saving {filename}: {e}")
-
-                                            logger.info(f"  ✓ Processed all attachments")
-
-                                        except Exception as e:
-                                            logger.error(f"  ✗ Error processing attachments: {e}")
-                                            logger.error(f"  Attachments not uploaded, but will continue processing")
-
-                                            # NOTIFICATION: Alert team about attachment failure
-                                            send_failure_notification(
-                                                subject="Attachment Upload Failed",
-                                                error_message=f"Failed to upload {len(email_data.attachments)} attachment(s) for claim #{email_data.claim_number}:\n"
-                                                            f"Error: {str(e)}\n"
-                                                            f"Attachments: {', '.join([a.filename for a in email_data.attachments])}\n"
-                                                            f"Note was posted but attachments failed.",
-                                                email_data=email_data
-                                            )
+                                        # Mark as failed in database
+                                        monitor.mark_email_processed(email_data, status="failed", error_message=result.error_message)
 
                                 except ClaimTitanError as e:
                                     logger.error(f"  ✗ Claim Titan error: {e}")
@@ -741,17 +752,18 @@ def main():
                                         except Exception as e:
                                             logger.warning(f"  Error closing browser: {e}")
 
-                                # ATOMIC: Mark as processed in DB and mark as read in IMAP
-                                if not monitor.mark_email_fully_processed(email_data, status="success"):
-                                    logger.error(f"  ⚠️  Database consistency error - sending alert")
-                                    send_failure_notification(
-                                        subject="Database Consistency Error - Note Posting",
-                                        error_message=f"Email {email_data.email_id} may be reprocessed. Check logs.",
-                                        email_data=email_data
-                                    )
-                                else:
-                                    total_emails_processed += 1
-                                    logger.info(f"  ✓ Processed successfully")
+                                # ATOMIC: Mark as processed in DB and mark as read in IMAP (only if successful)
+                                if result.success:
+                                    if not monitor.mark_email_fully_processed(email_data, status="success"):
+                                        logger.error(f"  ⚠️  Database consistency error - sending alert")
+                                        send_failure_notification(
+                                            subject="Database Consistency Error - Note Posting",
+                                            error_message=f"Email {email_data.email_id} may be reprocessed. Check logs.",
+                                            email_data=email_data
+                                        )
+                                    else:
+                                        total_emails_processed += 1
+                                        logger.info(f"  ✓ Processed successfully")
 
                             except SummarizerError as e:
                                 logger.error(f"  ✗ Summarization failed: {e}")
