@@ -96,28 +96,12 @@ Extract the following information from the contract and return it as JSON:
 **IMPORTANT FORMATTING RULES:**
 1. Return ONLY valid JSON, no additional text or explanation
 2. Use null for any field that cannot be found
-3. For loss_type, use lowercase (e.g., "fire", "water", "wind")
+3. For loss_type, read EXACTLY what is written in the "Cause of loss" blank and use lowercase
 4. For dates, use YYYY-MM-DD format (e.g., "2026-01-28")
 5. Extract state as 2-letter code only (CO, not Colorado)
 6. Clean up addresses - remove extra spaces, format nicely
 
-**Example output:**
-{
-    "first_name": "John",
-    "last_name": "Smith",
-    "email": "john.smith@example.com",
-    "phone": "555-123-4567",
-    "street_address": "123 Main Street",
-    "city": "Los Angeles",
-    "state": "CA",
-    "zipcode": "90210",
-    "insurance_company": "State Farm",
-    "policy_number": "ABC123456",
-    "claim_number": "CLM987654",
-    "loss_type": "fire",
-    "loss_date": "2026-01-15",
-    "contract_date": "2026-01-20"
-}
+CRITICAL: Read the "Cause of loss" field VERY CAREFULLY character by character. Do not guess or assume.
 
 Now extract the data from the provided contract and return ONLY the JSON."""
 
