@@ -106,7 +106,7 @@ STATUS
             content += "View detailed logs: logs/monitor_daemon.log\n"
             content += f"{'='*80}\n"
 
-            with open(self.metrics_file, 'w') as f:
+            with open(self.metrics_file, 'w', encoding='utf-8') as f:
                 f.write(content)
 
         except Exception as e:
