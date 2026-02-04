@@ -735,7 +735,8 @@ class ClaimTitanBot:
             search_box.clear()
             search_box.fill(claim_number)
             search_box.press('Enter')
-            self.page.wait_for_load_state('networkidle')
+            self.page.wait_for_load_state('load')
+            self.page.wait_for_timeout(500)
 
             # Check if results found
             if self._has_claim_results():
@@ -800,11 +801,17 @@ class ClaimTitanBot:
             f'div.columns:has-text("{claim_number}") a[href*="/claims/"]'
         ).first
 
-        if not claim_link.is_visible():
+        # Wait for link to be visible with extended timeout
+        try:
+            claim_link.wait_for(state='visible', timeout=120000)  # 2 minutes
+        except Exception:
             raise SearchError(f"Claim {claim_number} not found in search results")
 
         claim_link.click()
-        self.page.wait_for_load_state('networkidle')
+        # Use 'load' instead of 'networkidle' - Claim Titan has background requests that prevent networkidle
+        self.page.wait_for_load_state('load')
+        # Give page a moment to render after load
+        self.page.wait_for_timeout(1000)
 
         # CRITICAL: Verify we're on the correct claim before posting
         self._verify_claim_number(original_claim)
@@ -834,7 +841,10 @@ class ClaimTitanBot:
             # Within that specific container, get the second <p> element (the value, not the label)
             claim_number_element = flex_container.locator('p.text-grey.font-500').first
 
-            if not claim_number_element.is_visible():
+            # Wait for element to be visible
+            try:
+                claim_number_element.wait_for(state='visible', timeout=30000)
+            except Exception:
                 raise PostError("Cannot verify claim number - element not found on page")
 
             page_claim_number = claim_number_element.inner_text().strip()
