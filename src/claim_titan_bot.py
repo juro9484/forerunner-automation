@@ -659,6 +659,24 @@ class ClaimTitanBot:
             self.logger.info(f"✓ Successfully created claim for {client_name}")
             self.logger.info(f"✓ Claim URL: {claim_url}")
 
+            # Add policy information if available
+            if client_data.policy_number and client_data.claim_number:
+                self.logger.info("=" * 80)
+                self.logger.info("ADDING POLICY TO CLAIM")
+                self.logger.info("=" * 80)
+                try:
+                    self._add_policy_to_claim(client_data)
+                    self.logger.info("✓ Policy added successfully")
+                except Exception as e:
+                    # Log error but don't fail the whole claim creation
+                    self.logger.error(f"⚠ Failed to add policy (claim still created): {e}")
+                    screenshot_path = self._take_screenshot(f"policy_addition_{client_data.first_name}")
+                    self.logger.error(f"⚠ Screenshot: {screenshot_path}")
+            elif client_data.policy_number and not client_data.claim_number:
+                self.logger.warning("⚠ Have policy_number but no claim_number - cannot add policy (need claim_number to search)")
+            else:
+                self.logger.info("No policy information to add (policy_number not in contract)")
+
             return ClaimCreationResult(
                 client_name=client_name,
                 claim_url=claim_url,
@@ -868,6 +886,105 @@ class ClaimTitanBot:
             raise
         except Exception as e:
             raise PostError(f"Failed to verify claim number: {e}")
+
+    def _add_policy_to_claim(self, client_data):
+        """
+        Add policy information to a newly created claim.
+
+        Args:
+            client_data: ClientData object with policy_number and insurance_company
+
+        Raises:
+            ClaimTitanError: If policy addition fails
+        """
+        self.logger.info(f"[POLICY STEP 1] Navigating to Claims home page...")
+        self.page.goto("https://claimtitan.com/claims")
+        self.page.wait_for_load_state('load', timeout=30000)
+        self.page.wait_for_timeout(1000)
+        self.logger.info("✓ [POLICY STEP 1 COMPLETE] On Claims page")
+
+        # Search for the claim using claim number
+        self.logger.info(f"[POLICY STEP 2] Searching for claim: {client_data.claim_number}")
+        claim_number_format = self._search_claim(client_data.claim_number)
+        self.logger.info("✓ [POLICY STEP 2 COMPLETE] Claim found")
+
+        # Open the claim
+        self.logger.info(f"[POLICY STEP 3] Opening claim...")
+        self._open_claim(claim_number_format, client_data.claim_number)
+        self.logger.info("✓ [POLICY STEP 3 COMPLETE] Claim opened")
+
+        # Click "Not Set" policy link
+        self.logger.info(f"[POLICY STEP 4] Looking for 'Not Set' policy link...")
+        policy_link = self.page.locator('a[href*="/policies/create"]:has-text("Not Set")').first
+
+        try:
+            policy_link.wait_for(state='visible', timeout=10000)
+            self._robust_click(policy_link, "'Not Set' policy link")
+            self.page.wait_for_load_state('load', timeout=30000)
+            self.page.wait_for_timeout(1000)
+            self.logger.info("✓ [POLICY STEP 4 COMPLETE] On policy creation page")
+        except Exception as e:
+            raise ClaimTitanError(f"Failed at POLICY STEP 4 (clicking 'Not Set' policy link): {e}")
+
+        # Fill policy number
+        self.logger.info(f"[POLICY STEP 5] Filling policy number: {client_data.policy_number}")
+        try:
+            policy_number_field = self.page.locator('input[name="policy_number"]')
+            policy_number_field.wait_for(state='visible', timeout=10000)
+            policy_number_field.fill(client_data.policy_number)
+            self.logger.info(f"  ✓ Filled policy number: {client_data.policy_number}")
+            self.logger.info("✓ [POLICY STEP 5 COMPLETE] Policy number filled")
+        except Exception as e:
+            raise ClaimTitanError(f"Failed at POLICY STEP 5 (filling policy number): {e}")
+
+        # Select insurance company from dropdown if available
+        if client_data.insurance_company:
+            self.logger.info(f"[POLICY STEP 6] Selecting insurance company: {client_data.insurance_company}")
+            try:
+                insurance_dropdown = self.page.locator('select[name="insurance_company_id"]')
+                insurance_dropdown.wait_for(state='visible', timeout=10000)
+
+                # Try to select by label (visible text)
+                try:
+                    insurance_dropdown.select_option(label=client_data.insurance_company)
+                    self.logger.info(f"  ✓ Selected insurance company (exact match): {client_data.insurance_company}")
+                except Exception:
+                    # Try fuzzy matching - find option containing the insurance name
+                    self.logger.info(f"  Exact match failed, trying fuzzy match...")
+                    options = insurance_dropdown.locator('option').all()
+                    matched = False
+
+                    for option in options:
+                        option_text = option.inner_text().strip()
+                        # Check if insurance name is contained in option text (case insensitive)
+                        if client_data.insurance_company.lower() in option_text.lower():
+                            option_value = option.get_attribute('value')
+                            insurance_dropdown.select_option(value=option_value)
+                            self.logger.info(f"  ✓ Selected insurance company (fuzzy match): {option_text}")
+                            matched = True
+                            break
+
+                    if not matched:
+                        self.logger.warning(f"  ⚠ Could not find insurance company '{client_data.insurance_company}' in dropdown, skipping")
+
+                self.logger.info("✓ [POLICY STEP 6 COMPLETE] Insurance company selected")
+            except Exception as e:
+                # Log warning but continue - insurance is optional
+                self.logger.warning(f"  ⚠ Failed to select insurance company (continuing anyway): {e}")
+        else:
+            self.logger.info("[POLICY STEP 6] No insurance company to select")
+
+        # Click Save Policy button
+        self.logger.info(f"[POLICY STEP 7] Clicking Save Policy button...")
+        try:
+            save_button = self.page.locator('button[type="submit"]:has-text("Save Policy")').first
+            save_button.wait_for(state='visible', timeout=10000)
+            self._robust_click(save_button, "Save Policy button")
+            self.page.wait_for_load_state('load', timeout=30000)
+            self.page.wait_for_timeout(1000)
+            self.logger.info("✓ [POLICY STEP 7 COMPLETE] Policy saved")
+        except Exception as e:
+            raise ClaimTitanError(f"Failed at POLICY STEP 7 (clicking Save Policy button): {e}")
 
     def _open_notes_form(self):
         """Open notes sidebar and add note form with robust timeout handling."""
