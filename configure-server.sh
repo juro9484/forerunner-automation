@@ -91,6 +91,7 @@ if [ "$SKIP_LOGROTATE" = false ]; then
 # Forerunner Automation Log Rotation
 # Rotates logs weekly, keeps 12 weeks (3 months)
 $SCRIPT_DIR/logs/*.log {
+    su $(whoami) $(whoami)
     weekly
     rotate 12
     compress
