@@ -261,7 +261,8 @@ class ClaimTitanBot:
             self.page.locator('button[type="submit"]').click()
 
             # Wait for navigation
-            self.page.wait_for_load_state('networkidle')
+            self.page.wait_for_load_state('load')
+            self.page.wait_for_timeout(1000)
 
             # Verify login success by checking for search box
             if not self.page.locator('input[name="search"]').is_visible():
@@ -384,7 +385,8 @@ class ClaimTitanBot:
             current_step = "navigating to Claims page"
             self.logger.info(f"[STEP 1] Navigating to Claims page...")
             self.page.goto("https://claimtitan.com/claims")
-            self.page.wait_for_load_state('networkidle', timeout=30000)
+            self.page.wait_for_load_state('load', timeout=30000)
+            self.page.wait_for_timeout(1000)
             self.logger.info("✓ [STEP 1 COMPLETE] On Claims page")
 
             # Click "Add Claim" button to open modal
@@ -616,7 +618,7 @@ class ClaimTitanBot:
             current_step = "waiting for form submission to complete"
             self.logger.info(f"[STEP 11] Waiting for form submission and redirect...")
             try:
-                self.page.wait_for_load_state('networkidle', timeout=30000)
+                self.page.wait_for_load_state('load', timeout=30000)
                 self.page.wait_for_timeout(2000)
                 self.logger.info("✓ [STEP 11 COMPLETE] Form submitted, page loaded")
             except Exception as e:
@@ -754,7 +756,8 @@ class ClaimTitanBot:
                 search_box.clear()
                 search_box.fill(claim_no_hyphens)
                 search_box.press('Enter')
-                self.page.wait_for_load_state('networkidle')
+                self.page.wait_for_load_state('load')
+                self.page.wait_for_timeout(1000)
 
                 if self._has_claim_results():
                     if attempt > 0:
@@ -878,12 +881,13 @@ class ClaimTitanBot:
 
                 # Step 0: Wait for page to be fully loaded and interactive
                 self.logger.info("Waiting for page to be fully loaded...")
-                self.page.wait_for_load_state('networkidle', timeout=60000)
-                self.page.wait_for_load_state('domcontentloaded', timeout=60000)
-                self.logger.info("✓ Page fully loaded")
+                self.page.wait_for_load_state('load', timeout=60000)
+                self.logger.info("✓ Page loaded")
 
-                # Additional wait for any animations/JavaScript to settle
-                self.page.wait_for_timeout(1000)
+                # Wait longer for JavaScript to initialize (networkidle never happens on Claim Titan)
+                self.logger.info("Waiting for page JavaScript to initialize...")
+                self.page.wait_for_timeout(3000)
+                self.logger.info("✓ JavaScript should be ready")
 
                 # Step 1: Click Notes sidebar button to open notes panel
                 self.logger.info("Looking for Notes sidebar button...")
@@ -933,9 +937,9 @@ class ClaimTitanBot:
                 if not click_success:
                     raise PostError("All click strategies failed for Notes button")
 
-                # Wait for sidebar to fully render and verify it opened
+                # Wait longer for sidebar to fully render and animations to complete
                 self.logger.info("Waiting for notes panel to render...")
-                self.page.wait_for_timeout(2000)
+                self.page.wait_for_timeout(4000)  # Increased from 2s to 4s
 
                 # Verify the notes panel actually opened by checking for "New Note" button
                 self.logger.info("Verifying notes panel opened...")
@@ -1132,7 +1136,8 @@ class ClaimTitanBot:
             self.logger.info("Clicked Files tab")
 
             # Wait for page to load
-            self.page.wait_for_load_state('networkidle')
+            self.page.wait_for_load_state('load')
+            self.page.wait_for_timeout(1000)
 
             # Wait for folder cards to appear
             self.page.wait_for_selector('section.column-12', state='visible', timeout=10000)
