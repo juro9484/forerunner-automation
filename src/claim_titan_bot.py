@@ -289,14 +289,9 @@ class ClaimTitanBot:
         """
         self.logger.info(f"Posting note to claim {claim_number} (timeout: {timeout_minutes} min)")
 
-        # Set page timeout for this operation
-        original_timeout = self.page.default_timeout
-        try:
-            self.page.set_default_timeout(timeout_minutes * 60 * 1000)  # Convert to milliseconds
-            return self._post_note_impl(claim_number, title, description)
-        finally:
-            # Restore original timeout
-            self.page.set_default_timeout(original_timeout)
+        # Set page timeout for this operation (convert minutes to milliseconds)
+        self.page.set_default_timeout(timeout_minutes * 60 * 1000)
+        return self._post_note_impl(claim_number, title, description)
 
     def _post_note_impl(self, claim_number: str, title: str, description: str) -> ClaimTitanResult:
         """
@@ -366,14 +361,9 @@ class ClaimTitanBot:
         client_name = f"{client_data.first_name} {client_data.last_name or ''}".strip()
         self.logger.info(f"Creating new claim for client: {client_name} (timeout: {timeout_minutes} min)")
 
-        # Set page timeout for this operation
-        original_timeout = self.page.default_timeout
-        try:
-            self.page.set_default_timeout(timeout_minutes * 60 * 1000)  # Convert to milliseconds
-            return self._create_claim_impl(client_data)
-        finally:
-            # Restore original timeout
-            self.page.set_default_timeout(original_timeout)
+        # Set page timeout for this operation (convert minutes to milliseconds)
+        self.page.set_default_timeout(timeout_minutes * 60 * 1000)
+        return self._create_claim_impl(client_data)
 
     def _create_claim_impl(self, client_data) -> ClaimCreationResult:
         """

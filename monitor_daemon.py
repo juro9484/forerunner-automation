@@ -587,6 +587,7 @@ def main():
 
                                 # Post to Claim Titan CRM (open browser for this email only, with duplicate prevention)
                                 bot = None
+                                result = None  # Initialize to prevent undefined variable error
                                 try:
                                     # CHECK: Have we already posted this note?
                                     note_identifier = f"{summary.claim_number} - {summary.title[:50]}"  # Claim + truncated title
@@ -753,7 +754,7 @@ def main():
                                             logger.warning(f"  Error closing browser: {e}")
 
                                 # ATOMIC: Mark as processed in DB and mark as read in IMAP (only if successful)
-                                if result.success:
+                                if result and result.success:
                                     if not monitor.mark_email_fully_processed(email_data, status="success"):
                                         logger.error(f"  ⚠️  Database consistency error - sending alert")
                                         send_failure_notification(
