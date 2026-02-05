@@ -195,6 +195,85 @@ Format your response as JSON:
                 if attempt == max_retries - 1:
                     raise SummarizerError(f"Summarization failed: {e}")
 
+    def _strip_quoted_replies(self, email_body: str) -> str:
+        """
+        Strip quoted/forwarded content from email body to get only the new message.
+
+        The NEWEST message is at the TOP of the email. This function removes everything
+        below the first quoted/forwarded message to preserve only the latest reply.
+
+        Args:
+            email_body: Full email body including quoted replies
+
+        Returns:
+            Email body with quoted content removed (newest message only)
+        """
+        import re
+
+        lines = email_body.split('\n')
+        new_lines = []
+
+        for i, line in enumerate(lines):
+            line_stripped = line.strip()
+
+            # STRICT email header detection in body (indicates quoted message)
+            # Must have actual email format: From: Name <email@domain.com> or From: email@domain.com
+            # Skip first 3 lines to avoid matching real email headers
+            if i >= 3:
+                # From: with email address pattern (very strict)
+                if re.match(r'^\s*From:\s+.*[<]?[\w\.-]+@[\w\.-]+[>]?', line, re.IGNORECASE):
+                    # This is a quoted message header - stop here
+                    break
+
+                # To: with email address pattern (very strict)
+                if re.match(r'^\s*To:\s+.*[<]?[\w\.-]+@[\w\.-]+[>]?', line, re.IGNORECASE):
+                    # Also indicates quoted message - stop here
+                    break
+
+                # Date: followed by typical date format (in body, not at top)
+                if re.match(r'^\s*Date:\s+\w+,?\s+\w+\s+\d+', line, re.IGNORECASE):
+                    # Date header in body indicates quoted message
+                    break
+
+                # Sent: followed by date (Outlook style)
+                if re.match(r'^\s*Sent:\s+\w+,?\s+\w+\s+\d+', line, re.IGNORECASE):
+                    # Outlook "Sent:" header
+                    break
+
+            # Other common quote patterns
+            if (
+                line_stripped.startswith('>') or  # > quoted text (very common)
+                (line_stripped.startswith('On ') and ' wrote:' in line) or  # On [date] [person] wrote:
+                '-----Original Message-----' in line or  # Outlook forward
+                '________________________________' in line or  # Outlook separator (long line of underscores)
+                re.match(r'^[-_]{8,}$', line_stripped) or  # Line of 8+ dashes/underscores (separator)
+                'begin forwarded message' in line_stripped.lower() or  # Apple Mail forward
+                line.strip() == '---' and i > 5  # Common separator (after some content)
+            ):
+                # Stop processing at first quote marker
+                break
+
+            new_lines.append(line)
+
+        # Join lines and clean up excessive whitespace
+        result = '\n'.join(new_lines).strip()
+
+        # Remove trailing signatures if they appear
+        # Common signature patterns
+        signature_patterns = [
+            r'\n\s*--\s*\n',  # -- signature separator
+            r'\n\s*Sent from my ',  # Mobile signatures
+            r'\n\s*Get Outlook for ',  # Outlook mobile
+        ]
+
+        for pattern in signature_patterns:
+            parts = re.split(pattern, result, maxsplit=1)
+            if len(parts) > 1:
+                result = parts[0].strip()
+                break
+
+        return result
+
     def _build_prompt(self, email_data: EmailData) -> str:
         """
         Build the user prompt from email data.
@@ -205,6 +284,9 @@ Format your response as JSON:
         Returns:
             Formatted prompt string
         """
+        # Strip quoted replies to get only the new message
+        clean_content = self._strip_quoted_replies(email_data.email_content)
+
         prompt = f"""Please summarize this insurance claim email:
 
 **Claim Number:** {email_data.claim_number}
@@ -214,15 +296,15 @@ Format your response as JSON:
 **Date:** {email_data.timestamp.strftime('%Y-%m-%d %H:%M:%S')}
 
 **Email Content:**
-{email_data.email_content}
+{clean_content}
 
 ---
 
-**IMPORTANT:** Only summarize the NEWEST message in this email (the most recent reply/communication at the top).
-IGNORE any quoted text, forwarded messages, or previous email history (text starting with ">", "On [date] wrote:", "From:", "-----Original Message-----", etc.).
-Focus only on what the sender is communicating in THIS specific message.
+**IMPORTANT:** This email content has been cleaned to show only the newest message from the sender.
+Use the From/To fields to accurately identify who sent this message and who received it.
+Create a title and description that reflects the sender's communication in THIS specific message.
 
-Please provide a summary in the JSON format specified. Use the From/To fields to understand who is communicating with whom and create an accurate title and description."""
+Please provide a summary in the JSON format specified."""
 
         return prompt
 
