@@ -375,8 +375,8 @@ Forerunner Claims Automation System
 
         msg.attach(MIMEText(body, 'plain'))
 
-        # Send email
-        with smtplib.SMTP(Config.SMTP_SERVER, Config.SMTP_PORT) as server:
+        # Send email (Office 365 uses port 587 with STARTTLS)
+        with smtplib.SMTP("smtp.office365.com", 587) as server:
             server.starttls()
             server.login(Config.BOT_EMAIL_USER, Config.BOT_EMAIL_PASS)
             server.send_message(msg)
