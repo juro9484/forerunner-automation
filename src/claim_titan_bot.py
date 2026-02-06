@@ -513,66 +513,74 @@ class ClaimTitanBot:
                         "backup": "32",
                     }
                     # Wait for dropdown to be ready
-                    # DEBUG: Check how many loss_type dropdowns exist
                     loss_type_count = self.page.locator('select[name="loss_type"]').count()
-                    self.logger.info(f"  DEBUG: Found {loss_type_count} loss_type dropdown(s) on page")
+                    self.logger.info(f"  Found {loss_type_count} loss_type dropdown(s) on page")
 
                     loss_dropdown = self.page.locator('select[name="loss_type"]').first
                     loss_dropdown.wait_for(state='visible', timeout=5000)
                     self.page.wait_for_timeout(1000)  # Let dropdown fully initialize
 
+                    # DEBUG: Show ALL available options in the dropdown
+                    available_options = loss_dropdown.evaluate("""
+                        el => Array.from(el.options).map(opt => ({
+                            value: opt.value,
+                            text: opt.text.trim()
+                        }))
+                    """)
+                    self.logger.info(f"  Available loss types in dropdown: {len(available_options)} options")
+                    for opt in available_options[:5]:  # Show first 5 to verify
+                        self.logger.info(f"    - value={opt['value']}: '{opt['text']}'")
+                    if len(available_options) > 5:
+                        self.logger.info(f"    ... and {len(available_options) - 5} more options")
+
                     # Try to find the loss type in our mapping
                     loss_value = loss_type_mapping.get(client_data.loss_type.lower())
 
                     if loss_value:
-                        self.logger.info(f"  Selecting loss type: '{client_data.loss_type}' (value: {loss_value})")
+                        self.logger.info(f"  Selecting loss type: '{client_data.loss_type}' (value: {loss_value}) on ALL visible dropdowns")
 
-                        # Select by value
-                        loss_dropdown.select_option(value=loss_value)
+                        # Get ALL loss_type dropdowns and set ALL of them
+                        all_dropdowns = self.page.locator('select[name="loss_type"]').all()
 
-                        # Trigger change/input events for Livewire (wire:model needs these)
-                        loss_dropdown.evaluate("""
-                            el => {
-                                el.dispatchEvent(new Event('change', { bubbles: true }));
-                                el.dispatchEvent(new Event('input', { bubbles: true }));
-                            }
-                        """)
+                        for idx, dropdown in enumerate(all_dropdowns):
+                            try:
+                                if dropdown.is_visible():
+                                    self.logger.info(f"    Setting dropdown #{idx}...")
+                                    dropdown.select_option(value=loss_value)
 
-                        # Wait for Livewire to sync the value
+                                    # Trigger change/input events for Livewire
+                                    dropdown.evaluate("""
+                                        el => {
+                                            el.dispatchEvent(new Event('change', { bubbles: true }));
+                                            el.dispatchEvent(new Event('input', { bubbles: true }));
+                                        }
+                                    """)
+                                    self.logger.info(f"    ✓ Dropdown #{idx} set")
+                            except Exception as e:
+                                self.logger.warning(f"    Could not set dropdown #{idx}: {e}")
+
+                        # Wait for Livewire to sync
                         self.logger.info(f"  Waiting for Livewire to sync...")
                         self.page.wait_for_timeout(2000)
 
-                        # NOW verify what actually got selected
-                        selected_value = loss_dropdown.evaluate("el => el.value")
-                        selected_text = loss_dropdown.evaluate("el => el.options[el.selectedIndex].text")
+                        # Verify ALL visible dropdowns
+                        all_correct = True
+                        for idx, dropdown in enumerate(all_dropdowns):
+                            try:
+                                if dropdown.is_visible():
+                                    selected_value = dropdown.evaluate("el => el.value")
+                                    selected_text = dropdown.evaluate("el => el.options[el.selectedIndex].text")
 
-                        # Check if it matches what we wanted
-                        if selected_value == loss_value:
-                            self.logger.info(f"  ✓ Loss type confirmed: '{selected_text}' (value: {selected_value})")
-                        else:
-                            # Mismatch - log it and retry
-                            self.logger.warning(f"  ⚠ Loss type mismatch! Wanted '{client_data.loss_type}' (value: {loss_value}), but got '{selected_text}' (value: {selected_value})")
-                            self.logger.warning(f"  ⚠ Retrying selection...")
-                            self.page.wait_for_timeout(500)
+                                    if selected_value == loss_value:
+                                        self.logger.info(f"  ✓ Dropdown #{idx} confirmed: '{selected_text}' (value: {selected_value})")
+                                    else:
+                                        self.logger.warning(f"  ✗ Dropdown #{idx} wrong: got '{selected_text}' (value: {selected_value}), wanted '{client_data.loss_type}' (value: {loss_value})")
+                                        all_correct = False
+                            except:
+                                pass
 
-                            # Retry: select and trigger events again
-                            loss_dropdown.select_option(value=loss_value)
-                            loss_dropdown.evaluate("""
-                                el => {
-                                    el.dispatchEvent(new Event('change', { bubbles: true }));
-                                    el.dispatchEvent(new Event('input', { bubbles: true }));
-                                }
-                            """)
-                            self.page.wait_for_timeout(2000)
-
-                            # Check again
-                            final_value = loss_dropdown.evaluate("el => el.value")
-                            final_text = loss_dropdown.evaluate("el => el.options[el.selectedIndex].text")
-
-                            if final_value == loss_value:
-                                self.logger.info(f"  ✓ Loss type confirmed after retry: '{final_text}' (value: {final_value})")
-                            else:
-                                self.logger.error(f"  ✗ Loss type still wrong after retry: '{final_text}' (value: {final_value})")
+                        if not all_correct:
+                            self.logger.warning(f"  ⚠ Some dropdowns still have wrong values after sync")
                     else:
                         # Loss type not in our mapping
                         self.logger.warning(f"  ⚠ Loss type '{client_data.loss_type}' not found in mapping - skipping selection")
