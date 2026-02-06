@@ -513,6 +513,10 @@ class ClaimTitanBot:
                         "backup": "32",
                     }
                     # Wait for dropdown to be ready
+                    # DEBUG: Check how many loss_type dropdowns exist
+                    loss_type_count = self.page.locator('select[name="loss_type"]').count()
+                    self.logger.info(f"  DEBUG: Found {loss_type_count} loss_type dropdown(s) on page")
+
                     loss_dropdown = self.page.locator('select[name="loss_type"]').first
                     loss_dropdown.wait_for(state='visible', timeout=5000)
                     self.page.wait_for_timeout(1000)  # Let dropdown fully initialize
@@ -652,6 +656,19 @@ class ClaimTitanBot:
             current_step = "clicking Save button to submit form"
             self.logger.info(f"[STEP 10] Submitting claim creation form...")
             try:
+                # FINAL DEBUG: Check ALL loss_type dropdowns right before submit
+                self.logger.info("  FINAL CHECK - checking all loss_type dropdowns before submit...")
+                all_loss_dropdowns = self.page.locator('select[name="loss_type"]').all()
+                for idx, dropdown in enumerate(all_loss_dropdowns):
+                    try:
+                        is_visible = dropdown.is_visible()
+                        if is_visible:
+                            val = dropdown.evaluate("el => el.value")
+                            txt = dropdown.evaluate("el => el.options[el.selectedIndex].text")
+                            self.logger.info(f"    Dropdown {idx}: visible={is_visible}, value={val}, text='{txt}'")
+                    except:
+                        pass
+
                 # Wait for slideover footer to fully appear after insurance selection
                 self.logger.info("  Waiting for slideover footer to be ready...")
                 self.page.wait_for_timeout(2000)
