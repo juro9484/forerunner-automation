@@ -208,6 +208,13 @@ class EmailMonitor:
         if match:
             # Normalize to uppercase for consistency
             claim_number = match.group(1).upper()
+
+            # Reject all-letter "claim numbers" like "CLAIM", "CONTRACT", etc.
+            # Real claim numbers always have at least one digit
+            if not any(char.isdigit() for char in claim_number):
+                self.logger.debug(f"Rejected all-letter claim number: {claim_number}")
+                return None
+
             self.logger.debug(f"Extracted claim number: {claim_number}")
             return claim_number
         return None

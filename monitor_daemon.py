@@ -442,6 +442,11 @@ def main():
     # Instead, we'll open/close it for each email to avoid Windows service issues
     logger.info("")  # Blank line for readability
 
+    # Send initial health report on startup
+    logger.info("📧 Sending startup health report...")
+    send_hourly_health_report(metrics)
+    last_health_report_time = datetime.now()  # Reset timer after sending
+
     while running:
         check_count += 1
         logger.info(f"\n[Check #{check_count}] Starting email check at {datetime.now()}")
