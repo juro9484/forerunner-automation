@@ -111,7 +111,12 @@ Press `Ctrl+C` when done watching
 
 ---
 
+
+
 ## 📸 Viewing Screenshots (When Errors Occur)
+## to download
+
+gcloud compute scp roakprod-first:~/forerunner-automation/screenshots/*.png ~/Downloads/
 
 ### List all screenshots
 ```bash

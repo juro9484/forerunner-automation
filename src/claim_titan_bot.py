@@ -514,8 +514,23 @@ class ClaimTitanBot:
                     }
                     loss_value = loss_type_mapping.get(client_data.loss_type.lower())
                     if loss_value:
-                        self.page.locator('select[name="loss_type"]').first.select_option(loss_value)
-                        self.logger.info(f"  ✓ Selected loss type: {client_data.loss_type}")
+                        # Wait for dropdown to be ready before selecting
+                        loss_dropdown = self.page.locator('select[name="loss_type"]').first
+                        loss_dropdown.wait_for(state='visible', timeout=5000)
+                        self.page.wait_for_timeout(1000)  # Longer pause for dropdown to fully initialize
+
+                        # Select by value and verify
+                        loss_dropdown.select_option(value=loss_value)
+                        self.page.wait_for_timeout(300)  # Let selection register
+
+                        # Verify the correct option is selected
+                        selected_value = loss_dropdown.evaluate("el => el.value")
+                        if selected_value != loss_value:
+                            self.logger.warning(f"  ⚠ Loss type selection mismatch! Wanted: {loss_value}, Got: {selected_value}. Retrying...")
+                            self.page.wait_for_timeout(500)
+                            loss_dropdown.select_option(value=loss_value)
+
+                        self.logger.info(f"  ✓ Selected loss type: {client_data.loss_type} (value: {loss_value})")
 
                 self.logger.info("✓ [STEP 7 COMPLETE] Optional claim info filled")
             except Exception as e:
@@ -739,7 +754,8 @@ class ClaimTitanBot:
         """
         self.logger.info(f"Searching for claim: {claim_number}")
 
-        search_box = self.page.locator('input[name="search"]')
+        # Use the specific search box on Claims page (there are 2 search boxes on the page)
+        search_box = self.page.get_by_placeholder("Search by Claim Number, Job")
 
         # RETRY LOGIC: Claim might be indexing, retry with delay
         max_retries = 2
@@ -891,30 +907,18 @@ class ClaimTitanBot:
         """
         Add policy information to a newly created claim.
 
+        NOTE: This function assumes we're already ON the claim page after creation.
+        No need to navigate away and search back - we're already there!
+
         Args:
             client_data: ClientData object with policy_number and insurance_company
 
         Raises:
             ClaimTitanError: If policy addition fails
         """
-        self.logger.info(f"[POLICY STEP 1] Navigating to Claims home page...")
-        self.page.goto("https://claimtitan.com/claims")
-        self.page.wait_for_load_state('load', timeout=30000)
-        self.page.wait_for_timeout(1000)
-        self.logger.info("✓ [POLICY STEP 1 COMPLETE] On Claims page")
-
-        # Search for the claim using claim number
-        self.logger.info(f"[POLICY STEP 2] Searching for claim: {client_data.claim_number}")
-        claim_number_format = self._search_claim(client_data.claim_number)
-        self.logger.info("✓ [POLICY STEP 2 COMPLETE] Claim found")
-
-        # Open the claim
-        self.logger.info(f"[POLICY STEP 3] Opening claim...")
-        self._open_claim(claim_number_format, client_data.claim_number)
-        self.logger.info("✓ [POLICY STEP 3 COMPLETE] Claim opened")
-
-        # Click "Not Set" policy link
-        self.logger.info(f"[POLICY STEP 4] Looking for 'Not Set' policy link...")
+        # We're already on the claim page after creation, so skip navigation
+        self.logger.info(f"[POLICY STEP 1] Looking for 'Not Set' policy link on current claim page...")
+        self.page.wait_for_timeout(2000)  # Brief wait for page to settle
         policy_link = self.page.locator('a[href*="/policies/create"]:has-text("Not Set")').first
 
         try:
@@ -922,24 +926,24 @@ class ClaimTitanBot:
             self._robust_click(policy_link, "'Not Set' policy link")
             self.page.wait_for_load_state('load', timeout=30000)
             self.page.wait_for_timeout(1000)
-            self.logger.info("✓ [POLICY STEP 4 COMPLETE] On policy creation page")
+            self.logger.info("✓ [POLICY STEP 1 COMPLETE] On policy creation page")
         except Exception as e:
-            raise ClaimTitanError(f"Failed at POLICY STEP 4 (clicking 'Not Set' policy link): {e}")
+            raise ClaimTitanError(f"Failed at POLICY STEP 1 (clicking 'Not Set' policy link): {e}")
 
         # Fill policy number
-        self.logger.info(f"[POLICY STEP 5] Filling policy number: {client_data.policy_number}")
+        self.logger.info(f"[POLICY STEP 2] Filling policy number: {client_data.policy_number}")
         try:
             policy_number_field = self.page.locator('input[name="policy_number"]')
             policy_number_field.wait_for(state='visible', timeout=10000)
             policy_number_field.fill(client_data.policy_number)
             self.logger.info(f"  ✓ Filled policy number: {client_data.policy_number}")
-            self.logger.info("✓ [POLICY STEP 5 COMPLETE] Policy number filled")
+            self.logger.info("✓ [POLICY STEP 2 COMPLETE] Policy number filled")
         except Exception as e:
-            raise ClaimTitanError(f"Failed at POLICY STEP 5 (filling policy number): {e}")
+            raise ClaimTitanError(f"Failed at POLICY STEP 2 (filling policy number): {e}")
 
         # Select insurance company from dropdown if available
         if client_data.insurance_company:
-            self.logger.info(f"[POLICY STEP 6] Selecting insurance company: {client_data.insurance_company}")
+            self.logger.info(f"[POLICY STEP 3] Selecting insurance company: {client_data.insurance_company}")
             try:
                 insurance_dropdown = self.page.locator('select[name="insurance_company_id"]')
                 insurance_dropdown.wait_for(state='visible', timeout=10000)
@@ -967,24 +971,24 @@ class ClaimTitanBot:
                     if not matched:
                         self.logger.warning(f"  ⚠ Could not find insurance company '{client_data.insurance_company}' in dropdown, skipping")
 
-                self.logger.info("✓ [POLICY STEP 6 COMPLETE] Insurance company selected")
+                self.logger.info("✓ [POLICY STEP 3 COMPLETE] Insurance company selected")
             except Exception as e:
                 # Log warning but continue - insurance is optional
                 self.logger.warning(f"  ⚠ Failed to select insurance company (continuing anyway): {e}")
         else:
-            self.logger.info("[POLICY STEP 6] No insurance company to select")
+            self.logger.info("[POLICY STEP 3] No insurance company to select")
 
         # Click Save Policy button
-        self.logger.info(f"[POLICY STEP 7] Clicking Save Policy button...")
+        self.logger.info(f"[POLICY STEP 4] Clicking Save Policy button...")
         try:
             save_button = self.page.locator('button[type="submit"]:has-text("Save Policy")').first
             save_button.wait_for(state='visible', timeout=10000)
             self._robust_click(save_button, "Save Policy button")
             self.page.wait_for_load_state('load', timeout=30000)
             self.page.wait_for_timeout(1000)
-            self.logger.info("✓ [POLICY STEP 7 COMPLETE] Policy saved")
+            self.logger.info("✓ [POLICY STEP 4 COMPLETE] Policy saved")
         except Exception as e:
-            raise ClaimTitanError(f"Failed at POLICY STEP 7 (clicking Save Policy button): {e}")
+            raise ClaimTitanError(f"Failed at POLICY STEP 4 (clicking Save Policy button): {e}")
 
     def _open_notes_form(self):
         """Open notes sidebar and add note form with robust timeout handling."""
