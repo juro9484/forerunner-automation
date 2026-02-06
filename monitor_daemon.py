@@ -283,6 +283,110 @@ def extract_contact_info_from_email(email_content: str) -> dict:
     return result
 
 
+def send_hourly_health_report(metrics_tracker: MetricsTracker):
+    """
+    Send hourly health check email with system metrics.
+
+    Args:
+        metrics_tracker: MetricsTracker instance with current stats
+    """
+    import smtplib
+    from email.mime.text import MIMEText
+    from email.mime.multipart import MIMEMultipart
+
+    try:
+        # Get current metrics
+        stats = metrics_tracker.get_stats()
+        success_rate = stats["success_rate"]
+
+        # Determine health status
+        if success_rate >= 95.0:
+            status_emoji = "🟢"
+            status_text = "HEALTHY"
+        elif success_rate >= 85.0:
+            status_emoji = "🟡"
+            status_text = "DEGRADED"
+        else:
+            status_emoji = "🔴"
+            status_text = "CRITICAL"
+
+        # Notification recipients
+        notification_emails = [
+            "juan@roaksystems.com",
+            "juanrod2000@gmail.com",
+            "leifohovda@gmail.com",
+            "leif@roaksystems.com",
+            "support@roaksystems.com"
+        ]
+        recipients = ", ".join(notification_emails)
+
+        # Create email
+        msg = MIMEMultipart()
+        msg['From'] = Config.BOT_EMAIL_USER
+        msg['To'] = recipients
+        msg['Subject'] = f"{status_emoji} Forerunner Automation - Hourly Health Report"
+
+        # Build email body
+        body = f"""
+Forerunner Claims Automation - Hourly Health Report
+{'='*70}
+
+SYSTEM STATUS: {status_emoji} {status_text}
+{'='*70}
+
+METRICS (Since {stats['session_start'][:10]})
+{'='*70}
+Total Emails Processed:    {stats['total_emails']}
+Notes Posted to CRM:       {stats['notes_posted']}
+Claims Created:            {stats['claims_created']}
+
+SUCCESS RATE
+{'='*70}
+Successful Operations:     {stats['successful']}
+Failed Operations:         {stats['failed']}
+Success Rate:              {success_rate:.1f}%
+
+"""
+
+        # Add status details
+        if success_rate >= 95.0:
+            body += "✅ System operating normally (above 95% SLA target)\n"
+        elif success_rate >= 85.0:
+            body += "⚠️  System degraded (below 95% target but above 85%)\n"
+            body += "   Action: Monitor closely, investigate if issues persist\n"
+        else:
+            body += "🚨 CRITICAL: System below 85% success rate\n"
+            body += "   Action: Immediate investigation required\n"
+
+        body += f"""
+
+RECENT ACTIVITY
+{'='*70}
+Last Update:               {stats['last_update']}
+Session Started:           {stats['session_start']}
+
+{'='*70}
+This is an automated hourly health check.
+For detailed logs, check: logs/monitor_daemon.log on the VM
+
+{'='*70}
+Forerunner Claims Automation System
+"""
+
+        msg.attach(MIMEText(body, 'plain'))
+
+        # Send email
+        with smtplib.SMTP(Config.SMTP_SERVER, Config.SMTP_PORT) as server:
+            server.starttls()
+            server.login(Config.BOT_EMAIL_USER, Config.BOT_EMAIL_PASS)
+            server.send_message(msg)
+
+        logger.info(f"✓ Sent hourly health report (Status: {status_text}, Success Rate: {success_rate:.1f}%)")
+
+    except Exception as e:
+        logger.error(f"Failed to send hourly health report: {e}")
+
+
 def signal_handler(signum, frame):
     """Handle shutdown signals gracefully."""
     global running
@@ -315,6 +419,7 @@ def main():
 
     check_count = 0
     total_emails_processed = 0
+    last_health_report_time = datetime.now()  # Track last health report
 
     # Initialize metrics tracker and health checker
     metrics = MetricsTracker()
@@ -322,6 +427,7 @@ def main():
 
     logger.info("✓ Metrics tracker initialized")
     logger.info("✓ Health checker initialized")
+    logger.info("✓ Hourly health reports ENABLED")
 
     # Initialize summarizer once
     try:
@@ -342,6 +448,13 @@ def main():
 
         # Reset daily metrics if new day
         metrics.reset_daily()
+
+        # Send hourly health report if 1 hour has passed
+        time_since_last_report = datetime.now() - last_health_report_time
+        if time_since_last_report >= timedelta(hours=1):
+            logger.info("⏰ Sending hourly health report...")
+            send_hourly_health_report(metrics)
+            last_health_report_time = datetime.now()
 
         # Record check start for health monitoring
         health.record_check_start()
