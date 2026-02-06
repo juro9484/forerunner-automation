@@ -512,25 +512,51 @@ class ClaimTitanBot:
                         "falling object": "31",
                         "backup": "32",
                     }
+                    # Wait for dropdown to be ready
+                    loss_dropdown = self.page.locator('select[name="loss_type"]').first
+                    loss_dropdown.wait_for(state='visible', timeout=5000)
+                    self.page.wait_for_timeout(1000)  # Let dropdown fully initialize
+
+                    # Try to find the loss type in our mapping
                     loss_value = loss_type_mapping.get(client_data.loss_type.lower())
+
                     if loss_value:
-                        # Wait for dropdown to be ready before selecting
-                        loss_dropdown = self.page.locator('select[name="loss_type"]').first
-                        loss_dropdown.wait_for(state='visible', timeout=5000)
-                        self.page.wait_for_timeout(1000)  # Longer pause for dropdown to fully initialize
+                        self.logger.info(f"  Selecting loss type: '{client_data.loss_type}' (value: {loss_value})")
 
-                        # Select by value and verify
+                        # Select by value
                         loss_dropdown.select_option(value=loss_value)
-                        self.page.wait_for_timeout(300)  # Let selection register
 
-                        # Verify the correct option is selected
+                        # CRITICAL: Wait for Livewire to sync (wire:model in the HTML)
+                        # Livewire may override our selection if we don't wait
+                        self.page.wait_for_timeout(1000)
+
+                        # Verify what actually got selected
                         selected_value = loss_dropdown.evaluate("el => el.value")
-                        if selected_value != loss_value:
-                            self.logger.warning(f"  ⚠ Loss type selection mismatch! Wanted: {loss_value}, Got: {selected_value}. Retrying...")
+                        selected_text = loss_dropdown.evaluate("el => el.options[el.selectedIndex].text")
+
+                        # Check if it matches what we wanted
+                        if selected_value == loss_value:
+                            self.logger.info(f"  ✓ Loss type confirmed: '{selected_text}' (value: {selected_value})")
+                        else:
+                            # Mismatch - log it and retry
+                            self.logger.warning(f"  ⚠ Loss type mismatch! Wanted '{client_data.loss_type}' (value: {loss_value}), but got '{selected_text}' (value: {selected_value})")
+                            self.logger.warning(f"  ⚠ Retrying selection...")
                             self.page.wait_for_timeout(500)
                             loss_dropdown.select_option(value=loss_value)
+                            self.page.wait_for_timeout(1000)
 
-                        self.logger.info(f"  ✓ Selected loss type: {client_data.loss_type} (value: {loss_value})")
+                            # Check again
+                            final_value = loss_dropdown.evaluate("el => el.value")
+                            final_text = loss_dropdown.evaluate("el => el.options[el.selectedIndex].text")
+
+                            if final_value == loss_value:
+                                self.logger.info(f"  ✓ Loss type confirmed after retry: '{final_text}' (value: {final_value})")
+                            else:
+                                self.logger.error(f"  ✗ Loss type still wrong after retry: '{final_text}' (value: {final_value})")
+                    else:
+                        # Loss type not in our mapping
+                        self.logger.warning(f"  ⚠ Loss type '{client_data.loss_type}' not found in mapping - skipping selection")
+                        self.logger.warning(f"  ⚠ Add this to loss_type_mapping if needed")
 
                 self.logger.info("✓ [STEP 7 COMPLETE] Optional claim info filled")
             except Exception as e:
