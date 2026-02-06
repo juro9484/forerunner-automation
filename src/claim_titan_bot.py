@@ -526,11 +526,19 @@ class ClaimTitanBot:
                         # Select by value
                         loss_dropdown.select_option(value=loss_value)
 
-                        # CRITICAL: Wait for Livewire to sync (wire:model in the HTML)
-                        # Livewire may override our selection if we don't wait
-                        self.page.wait_for_timeout(1000)
+                        # Trigger change/input events for Livewire (wire:model needs these)
+                        loss_dropdown.evaluate("""
+                            el => {
+                                el.dispatchEvent(new Event('change', { bubbles: true }));
+                                el.dispatchEvent(new Event('input', { bubbles: true }));
+                            }
+                        """)
 
-                        # Verify what actually got selected
+                        # Wait for Livewire to sync the value
+                        self.logger.info(f"  Waiting for Livewire to sync...")
+                        self.page.wait_for_timeout(2000)
+
+                        # NOW verify what actually got selected
                         selected_value = loss_dropdown.evaluate("el => el.value")
                         selected_text = loss_dropdown.evaluate("el => el.options[el.selectedIndex].text")
 
@@ -542,8 +550,16 @@ class ClaimTitanBot:
                             self.logger.warning(f"  ⚠ Loss type mismatch! Wanted '{client_data.loss_type}' (value: {loss_value}), but got '{selected_text}' (value: {selected_value})")
                             self.logger.warning(f"  ⚠ Retrying selection...")
                             self.page.wait_for_timeout(500)
+
+                            # Retry: select and trigger events again
                             loss_dropdown.select_option(value=loss_value)
-                            self.page.wait_for_timeout(1000)
+                            loss_dropdown.evaluate("""
+                                el => {
+                                    el.dispatchEvent(new Event('change', { bubbles: true }));
+                                    el.dispatchEvent(new Event('input', { bubbles: true }));
+                                }
+                            """)
+                            self.page.wait_for_timeout(2000)
 
                             # Check again
                             final_value = loss_dropdown.evaluate("el => el.value")
