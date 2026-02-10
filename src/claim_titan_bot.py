@@ -977,29 +977,31 @@ class ClaimTitanBot:
         # Now find the link inside that row
         self.logger.info(f"  Looking for link inside claim row...")
 
-        # Count how many links are in the row
-        links = claim_row.locator('a[href*="/claims/"]')
-        link_count = links.count()
-        self.logger.info(f"  Found {link_count} link(s) in row")
+        # Find all links in the row
+        all_links = claim_row.locator('a')
+        link_count = all_links.count()
+        self.logger.info(f"  Found {link_count} total link(s) in row")
 
-        if link_count == 0:
-            # Try alternative: any link at all
-            self.logger.info(f"  No /claims/ links found, trying any <a> tag...")
-            all_links = claim_row.locator('a')
-            self.logger.info(f"  Found {all_links.count()} total links in row")
+        # Filter for the actual claim detail link (not board/navigation links)
+        claim_link = None
+        for i in range(link_count):
+            link = all_links.nth(i)
+            href = link.get_attribute('href')
+            self.logger.info(f"    Link {i}: href='{href}'")
 
-            for i in range(all_links.count()):
-                link = all_links.nth(i)
-                href = link.get_attribute('href')
-                self.logger.info(f"    Link {i}: href='{href}'")
-                if '/claims/' in href:
+            # We want /claims/[NUMBER], not /claims/board or other navigation
+            if href and '/claims/' in href and not any(x in href for x in ['/board', '/jobs', '?']):
+                # Check if it ends with a number (the claim ID)
+                claim_id = href.split('/claims/')[-1]
+                if claim_id.isdigit():
+                    self.logger.info(f"    ✓ This is the claim link (ID: {claim_id})")
                     claim_link = link
                     break
+                else:
+                    self.logger.info(f"    ✗ Not a claim detail link")
 
-            if not claim_link:
-                raise SearchError(f"No clickable link found in row for claim {claim_number}")
-        else:
-            claim_link = links.first
+        if not claim_link:
+            raise SearchError(f"No clickable claim detail link found in row for {claim_number}")
 
         # Try to get link info (but don't fail if not visible)
         try:
