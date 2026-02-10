@@ -369,8 +369,13 @@ class EmailMonitor:
             self.imap_connection.select("INBOX")
             self.logger.info("Selected INBOX")
 
-            # Search for unread emails
-            status, message_ids = self.imap_connection.search(None, "UNSEEN")
+            # Search for emails from last 30 days (read or unread)
+            # Database handles deduplication, so we don't rely on unread status
+            from datetime import datetime, timedelta
+            since_date = (datetime.now() - timedelta(days=30)).strftime("%d-%b-%Y")
+            self.logger.info(f"Searching for emails since {since_date} (last 30 days)")
+
+            status, message_ids = self.imap_connection.search(None, f'(SINCE {since_date})')
 
             if status != "OK":
                 raise EmailMonitorError(f"Failed to search emails: {status}")
@@ -379,10 +384,10 @@ class EmailMonitor:
             email_ids = message_ids[0].split()
 
             if not email_ids:
-                self.logger.info("No unread emails found")
+                self.logger.info("No emails found in last 30 days")
                 return []
 
-            self.logger.info(f"Found {len(email_ids)} unread email(s)")
+            self.logger.info(f"Found {len(email_ids)} email(s) in last 30 days")
 
             # Process each email
             parsed_emails = []
