@@ -975,14 +975,38 @@ class ClaimTitanBot:
             raise SearchError(f"Could not find row with claim {claim_number}")
 
         # Now find the link inside that row
-        claim_link = claim_row.locator('a[href*="/claims/"]').first
+        self.logger.info(f"  Looking for link inside claim row...")
+
+        # Count how many links are in the row
+        links = claim_row.locator('a[href*="/claims/"]')
+        link_count = links.count()
+        self.logger.info(f"  Found {link_count} link(s) in row")
+
+        if link_count == 0:
+            # Try alternative: any link at all
+            self.logger.info(f"  No /claims/ links found, trying any <a> tag...")
+            all_links = claim_row.locator('a')
+            self.logger.info(f"  Found {all_links.count()} total links in row")
+
+            for i in range(all_links.count()):
+                link = all_links.nth(i)
+                href = link.get_attribute('href')
+                self.logger.info(f"    Link {i}: href='{href}'")
+                if '/claims/' in href:
+                    claim_link = link
+                    break
+
+            if not claim_link:
+                raise SearchError(f"No clickable link found in row for claim {claim_number}")
+        else:
+            claim_link = links.first
 
         try:
             claim_link.wait_for(state='visible', timeout=5000)
             link_text = claim_link.inner_text()
             self.logger.info(f"  ✓ Found claim link: '{link_text}'")
-        except Exception:
-            raise SearchError(f"Could not find clickable link for claim {claim_number}")
+        except Exception as e:
+            raise SearchError(f"Could not find clickable link for claim {claim_number}: {e}")
 
         self.logger.info(f"  Clicking claim link...")
         claim_link.click()
