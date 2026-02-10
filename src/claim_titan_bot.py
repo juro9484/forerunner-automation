@@ -960,17 +960,31 @@ class ClaimTitanBot:
         """
         self.logger.info(f"Opening claim: {claim_number}")
 
-        # Find container with claim number, then click the /claims/ link
-        claim_link = self.page.locator(
-            f'div.columns:has-text("{claim_number}") a[href*="/claims/"]'
-        ).first
+        # The claim number is in a span, but the link is a sibling in the same .columns div
+        # Structure: <div class="columns"> ... <span>{claim_number}</span> ... <a href="/claims/XXX">Name</a> ... </div>
+        # Find the .columns div containing the claim number, then find the link inside it
+        self.logger.info(f"  Looking for claim link containing '{claim_number}'...")
 
-        # Wait for link to be visible with extended timeout
+        # Find the parent columns div that has the claim number span
+        claim_row = self.page.locator(f'div.columns:has(span:has-text("{claim_number}"))').first
+
         try:
-            claim_link.wait_for(state='visible', timeout=120000)  # 2 minutes
+            claim_row.wait_for(state='visible', timeout=10000)
+            self.logger.info(f"  ✓ Found claim row")
         except Exception:
-            raise SearchError(f"Claim {claim_number} not found in search results")
+            raise SearchError(f"Could not find row with claim {claim_number}")
 
+        # Now find the link inside that row
+        claim_link = claim_row.locator('a[href*="/claims/"]').first
+
+        try:
+            claim_link.wait_for(state='visible', timeout=5000)
+            link_text = claim_link.inner_text()
+            self.logger.info(f"  ✓ Found claim link: '{link_text}'")
+        except Exception:
+            raise SearchError(f"Could not find clickable link for claim {claim_number}")
+
+        self.logger.info(f"  Clicking claim link...")
         claim_link.click()
         # Use 'load' instead of 'networkidle' - Claim Titan has background requests that prevent networkidle
         self.page.wait_for_load_state('load')
