@@ -907,24 +907,41 @@ class ClaimTitanBot:
     def _has_claim_results(self) -> bool:
         """
         Check if search returned any claim results.
+        Handles both scenarios:
+        1. Search auto-opened the claim (claim detail page)
+        2. Search returned results list
 
         Returns:
             True if results found, False otherwise
         """
         try:
             # Wait a bit for results to render (if any)
-            self.page.wait_for_timeout(500)
+            self.page.wait_for_timeout(1000)
 
-            # Look for the claims section header
-            results_header = self.page.locator('h4:has-text("Claim")')
-            has_results = results_header.is_visible(timeout=2000)
+            # SCENARIO 1: Check if claim was auto-opened (on claim detail page)
+            # Look for "Claim Information" section which is unique to claim pages
+            claim_info = self.page.locator('h4:has-text("Claim Information")').first
+            if claim_info.is_visible(timeout=1000):
+                self.logger.info(f"    ✓ Claim auto-opened - on claim detail page")
+                return True
 
-            if has_results:
-                self.logger.info(f"    ✓ Found 'Claim' header - results exist")
-            else:
-                self.logger.info(f"    ✗ No 'Claim' header found - no results")
+            # SCENARIO 2: Check if on search results page with claims listed
+            # Look for claim cards or rows in search results
+            claim_links = self.page.locator('a[href*="/claims/"]')
+            if claim_links.count() > 0:
+                self.logger.info(f"    ✓ Found {claim_links.count()} claim(s) in search results")
+                return True
 
-            return has_results
+            # SCENARIO 3: Check URL - if on a claim page
+            current_url = self.page.url
+            if '/claims/' in current_url and current_url != 'https://claimtitan.com/claims':
+                self.logger.info(f"    ✓ On claim page (URL: {current_url})")
+                return True
+
+            # No results found
+            self.logger.info(f"    ✗ No results found (URL: {current_url})")
+            return False
+
         except Exception as e:
             self.logger.info(f"    ✗ Error checking for results: {e}")
             return False
