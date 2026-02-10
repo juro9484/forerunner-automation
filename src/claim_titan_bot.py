@@ -863,9 +863,13 @@ class ClaimTitanBot:
             self.logger.info(f"  Pressing Enter...")
             search_box.press('Enter')
             self.page.wait_for_load_state('load', timeout=30000)
-            self.page.wait_for_timeout(1000)
+
+            # Wait longer for search results to load and render
+            self.logger.info(f"  Waiting for search results...")
+            self.page.wait_for_timeout(3000)
 
             # Check if results found
+            self.logger.info(f"  Checking for results...")
             if self._has_claim_results():
                 if attempt > 0:
                     self.logger.info(f"✓ Found claim with format: {claim_number} (after {attempt + 1} attempts)")
@@ -881,9 +885,13 @@ class ClaimTitanBot:
                 search_box.clear()
                 search_box.fill(claim_no_hyphens)
                 search_box.press('Enter')
-                self.page.wait_for_load_state('load')
-                self.page.wait_for_timeout(1000)
+                self.page.wait_for_load_state('load', timeout=30000)
 
+                # Wait longer for search results to load
+                self.logger.info(f"  Waiting for search results...")
+                self.page.wait_for_timeout(3000)
+
+                self.logger.info(f"  Checking for results...")
                 if self._has_claim_results():
                     if attempt > 0:
                         self.logger.info(f"✓ Found claim with format: {claim_no_hyphens} (after {attempt + 1} attempts)")
@@ -904,10 +912,21 @@ class ClaimTitanBot:
             True if results found, False otherwise
         """
         try:
+            # Wait a bit for results to render (if any)
+            self.page.wait_for_timeout(500)
+
             # Look for the claims section header
             results_header = self.page.locator('h4:has-text("Claim")')
-            return results_header.is_visible()
-        except Exception:
+            has_results = results_header.is_visible(timeout=2000)
+
+            if has_results:
+                self.logger.info(f"    ✓ Found 'Claim' header - results exist")
+            else:
+                self.logger.info(f"    ✗ No 'Claim' header found - no results")
+
+            return has_results
+        except Exception as e:
+            self.logger.info(f"    ✗ Error checking for results: {e}")
             return False
 
     def _open_claim(self, claim_number: str, original_claim: str):
