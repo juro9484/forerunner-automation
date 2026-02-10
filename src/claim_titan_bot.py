@@ -1001,15 +1001,23 @@ class ClaimTitanBot:
         else:
             claim_link = links.first
 
+        # Try to get link info (but don't fail if not visible)
         try:
-            claim_link.wait_for(state='visible', timeout=5000)
-            link_text = claim_link.inner_text()
-            self.logger.info(f"  ✓ Found claim link: '{link_text}'")
+            link_text = claim_link.inner_text(timeout=2000)
+            link_href = claim_link.get_attribute('href')
+            self.logger.info(f"  ✓ Found claim link: '{link_text}' (href: {link_href})")
         except Exception as e:
-            raise SearchError(f"Could not find clickable link for claim {claim_number}: {e}")
+            self.logger.info(f"  Link found but couldn't get text: {e}")
 
-        self.logger.info(f"  Clicking claim link...")
-        claim_link.click()
+        # Scroll into view and click (don't wait for strict visibility)
+        self.logger.info(f"  Scrolling to claim link and clicking...")
+        try:
+            claim_link.scroll_into_view_if_needed()
+            self.page.wait_for_timeout(500)
+            claim_link.click(force=True)  # Force click even if not strictly "visible"
+            self.logger.info(f"  ✓ Clicked claim link")
+        except Exception as e:
+            raise SearchError(f"Could not click claim link: {e}")
         # Use 'load' instead of 'networkidle' - Claim Titan has background requests that prevent networkidle
         self.page.wait_for_load_state('load')
         # Give page a moment to render after load
