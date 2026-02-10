@@ -821,8 +821,29 @@ class ClaimTitanBot:
         """
         self.logger.info(f"Searching for claim: {claim_number}")
 
-        # Use the specific search box on Claims page (there are 2 search boxes on the page)
-        search_box = self.page.get_by_placeholder("Search by Claim Number, Job")
+        # Ensure we're on the Claims page
+        current_url = self.page.url
+        if "/claims" not in current_url:
+            self.logger.info(f"  Not on Claims page (URL: {current_url}), navigating...")
+            self.page.goto("https://claimtitan.com/claims")
+            self.page.wait_for_load_state('load', timeout=30000)
+            self.page.wait_for_timeout(2000)
+
+        # Find the search box with explicit timeout and retry
+        self.logger.info(f"  Looking for search box...")
+        search_box = None
+        for i in range(3):
+            try:
+                search_box = self.page.get_by_placeholder("Search by Claim Number, Job")
+                search_box.wait_for(state='visible', timeout=10000)
+                self.logger.info(f"  ✓ Found search box")
+                break
+            except Exception as e:
+                if i < 2:
+                    self.logger.warning(f"  Search box not found (attempt {i+1}/3), retrying...")
+                    self.page.wait_for_timeout(2000)
+                else:
+                    raise SearchError(f"Search box not found after 3 attempts. URL: {self.page.url}. Error: {e}")
 
         # RETRY LOGIC: Claim might be indexing, retry with delay
         max_retries = 2
@@ -835,11 +856,14 @@ class ClaimTitanBot:
                 time.sleep(retry_delay)
 
             # Try with original format first
+            self.logger.info(f"  Filling search box with: {claim_number}")
             search_box.clear()
             search_box.fill(claim_number)
-            search_box.press('Enter')
-            self.page.wait_for_load_state('load')
             self.page.wait_for_timeout(500)
+            self.logger.info(f"  Pressing Enter...")
+            search_box.press('Enter')
+            self.page.wait_for_load_state('load', timeout=30000)
+            self.page.wait_for_timeout(1000)
 
             # Check if results found
             if self._has_claim_results():
