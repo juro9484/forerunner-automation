@@ -808,7 +808,7 @@ class ClaimTitanBot:
     def _search_claim(self, claim_number: str) -> str:
         """
         Search for a claim by number with retry logic (claim might be indexing).
-        Tries with and without hyphens.
+        Tries multiple variations: original, without suffix, without hyphens.
 
         Args:
             claim_number: Claim number to search for
@@ -877,10 +877,33 @@ class ClaimTitanBot:
                     self.logger.info(f"✓ Found claim with format: {claim_number}")
                 return claim_number
 
-            # If no results and claim has hyphens, try without hyphens
+            # If no results and claim has hyphens, try variations
             if '-' in claim_number:
+                # Try without last hyphenated segment (e.g., "059819533-01" -> "059819533")
+                # This handles cases where email has policy suffix but claim doesn't
+                if claim_number.count('-') >= 1:
+                    claim_without_suffix = claim_number.rsplit('-', 1)[0]
+                    self.logger.info(f"  No results, trying without suffix: {claim_without_suffix}")
+
+                    search_box.clear()
+                    search_box.fill(claim_without_suffix)
+                    search_box.press('Enter')
+                    self.page.wait_for_load_state('load', timeout=30000)
+
+                    self.logger.info(f"  Waiting for search results...")
+                    self.page.wait_for_timeout(3000)
+
+                    self.logger.info(f"  Checking for results...")
+                    if self._has_claim_results():
+                        if attempt > 0:
+                            self.logger.info(f"✓ Found claim with format: {claim_without_suffix} (after {attempt + 1} attempts)")
+                        else:
+                            self.logger.info(f"✓ Found claim with format: {claim_without_suffix}")
+                        return claim_without_suffix
+
+                # Try without hyphens at all
                 claim_no_hyphens = claim_number.replace('-', '')
-                self.logger.info(f"  No results with hyphens, trying without: {claim_no_hyphens}")
+                self.logger.info(f"  Still no results, trying without hyphens: {claim_no_hyphens}")
 
                 search_box.clear()
                 search_box.fill(claim_no_hyphens)
@@ -902,7 +925,7 @@ class ClaimTitanBot:
             if attempt < max_retries - 1:
                 self.logger.warning(f"  Claim {claim_number} not found (attempt {attempt + 1}), will retry...")
 
-        raise SearchError(f"Claim {claim_number} not found after {max_retries} attempts (tried with and without hyphens)")
+        raise SearchError(f"Claim {claim_number} not found after {max_retries} attempts (tried original, without suffix, and without hyphens)")
 
     def _has_claim_results(self) -> bool:
         """
