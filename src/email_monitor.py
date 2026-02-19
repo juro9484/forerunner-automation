@@ -197,6 +197,7 @@ class EmailMonitor:
     def _extract_claim_number(self, subject: str) -> Optional[str]:
         """
         Extract claim number from email subject line.
+        Searches for ALL potential matches and returns the first one with at least one digit.
 
         Args:
             subject: Email subject line
@@ -204,19 +205,24 @@ class EmailMonitor:
         Returns:
             Claim number if found (normalized to uppercase), None otherwise
         """
-        match = self.claim_pattern.search(subject)
-        if match:
+        # Find ALL matches in the subject (not just the first one)
+        matches = self.claim_pattern.findall(subject)
+
+        for claim_number in matches:
             # Normalize to uppercase for consistency
-            claim_number = match.group(1).upper()
+            claim_number = claim_number.upper()
 
             # Reject all-letter "claim numbers" like "CLAIM", "CONTRACT", etc.
             # Real claim numbers always have at least one digit
             if not any(char.isdigit() for char in claim_number):
                 self.logger.debug(f"Rejected all-letter claim number: {claim_number}")
-                return None
+                continue  # Try next match instead of returning None
 
+            # Found a valid claim number!
             self.logger.debug(f"Extracted claim number: {claim_number}")
             return claim_number
+
+        # No valid claim number found in any match
         return None
 
     def _get_email_body(self, message: Message) -> str:
