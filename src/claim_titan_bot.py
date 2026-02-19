@@ -1082,11 +1082,17 @@ class ClaimTitanBot:
             normalized_expected = expected_claim.replace('-', '').upper()
             normalized_page = page_claim_number.replace('-', '').upper()
 
+            # Allow match if they're equal OR if one is a prefix of the other
+            # This handles cases like email has "059819533-01" but page shows "059819533"
             if normalized_expected != normalized_page:
-                raise PostError(
-                    f"Claim number mismatch! Expected: {expected_claim}, "
-                    f"Found on page: {page_claim_number}"
-                )
+                if not (normalized_expected.startswith(normalized_page) or
+                        normalized_page.startswith(normalized_expected)):
+                    raise PostError(
+                        f"Claim number mismatch! Expected: {expected_claim}, "
+                        f"Found on page: {page_claim_number}"
+                    )
+                # Numbers match with suffix difference - log it but allow
+                self.logger.info(f"  Claim number matches with suffix difference: '{expected_claim}' vs '{page_claim_number}'")
 
             self.logger.info(f"✓ Verified claim number: {page_claim_number}")
 
