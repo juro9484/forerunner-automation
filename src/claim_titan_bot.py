@@ -845,6 +845,19 @@ class ClaimTitanBot:
                 else:
                     raise SearchError(f"Search box not found after 3 attempts. URL: {self.page.url}. Error: {e}")
 
+        # Build list of variations to try
+        variations = [claim_number]  # Always try original first
+
+        if '-' in claim_number:
+            # Add variation without last suffix (e.g., "059819533-01" -> "059819533")
+            if claim_number.count('-') >= 1:
+                variations.append(claim_number.rsplit('-', 1)[0])
+
+            # Add variation without any hyphens
+            variations.append(claim_number.replace('-', ''))
+
+        self.logger.info(f"  Will try {len(variations)} variation(s): {variations}")
+
         # RETRY LOGIC: Claim might be indexing, retry with delay
         max_retries = 2
         retry_delay = 30  # 30 seconds between retries
@@ -855,77 +868,58 @@ class ClaimTitanBot:
                 import time
                 time.sleep(retry_delay)
 
-            # Try with original format first
-            self.logger.info(f"  Filling search box with: {claim_number}")
-            search_box.clear()
-            search_box.fill(claim_number)
-            self.page.wait_for_timeout(500)
-            self.logger.info(f"  Pressing Enter...")
-            search_box.press('Enter')
-            self.page.wait_for_load_state('load', timeout=30000)
-
-            # Wait longer for search results to load and render
-            self.logger.info(f"  Waiting for search results...")
-            self.page.wait_for_timeout(3000)
-
-            # Check if results found
-            self.logger.info(f"  Checking for results...")
-            if self._has_claim_results():
-                if attempt > 0:
-                    self.logger.info(f"✓ Found claim with format: {claim_number} (after {attempt + 1} attempts)")
-                else:
-                    self.logger.info(f"✓ Found claim with format: {claim_number}")
-                return claim_number
-
-            # If no results and claim has hyphens, try variations
-            if '-' in claim_number:
-                # Try without last hyphenated segment (e.g., "059819533-01" -> "059819533")
-                # This handles cases where email has policy suffix but claim doesn't
-                if claim_number.count('-') >= 1:
-                    claim_without_suffix = claim_number.rsplit('-', 1)[0]
-                    self.logger.info(f"  No results, trying without suffix: {claim_without_suffix}")
-
-                    search_box.clear()
-                    search_box.fill(claim_without_suffix)
-                    search_box.press('Enter')
-                    self.page.wait_for_load_state('load', timeout=30000)
-
-                    self.logger.info(f"  Waiting for search results...")
-                    self.page.wait_for_timeout(3000)
-
-                    self.logger.info(f"  Checking for results...")
-                    if self._has_claim_results():
-                        if attempt > 0:
-                            self.logger.info(f"✓ Found claim with format: {claim_without_suffix} (after {attempt + 1} attempts)")
-                        else:
-                            self.logger.info(f"✓ Found claim with format: {claim_without_suffix}")
-                        return claim_without_suffix
-
-                # Try without hyphens at all
-                claim_no_hyphens = claim_number.replace('-', '')
-                self.logger.info(f"  Still no results, trying without hyphens: {claim_no_hyphens}")
-
+            # Try each variation
+            for variation in variations:
+                self.logger.info(f"  Trying variation: {variation}")
                 search_box.clear()
-                search_box.fill(claim_no_hyphens)
+                search_box.fill(variation)
+                self.page.wait_for_timeout(500)
+                self.logger.info(f"  Pressing Enter...")
                 search_box.press('Enter')
                 self.page.wait_for_load_state('load', timeout=30000)
 
-                # Wait longer for search results to load
+                # Wait for search results to load and render
                 self.logger.info(f"  Waiting for search results...")
                 self.page.wait_for_timeout(3000)
 
-                self.logger.info(f"  Checking for results...")
+                # Check if results found
+                self.logger.info(f"  Checking for results with variation '{variation}'...")
                 if self._has_claim_results():
-                    if attempt > 0:
-                        self.logger.info(f"✓ Found claim with format: {claim_no_hyphens} (after {attempt + 1} attempts)")
-                    else:
-                        self.logger.info(f"✓ Found claim with format: {claim_no_hyphens}")
-                    return claim_no_hyphens
+                    # Verify we can actually find a clickable claim link
+                    self.logger.info(f"  Found results, verifying clickable link exists...")
+                    try:
+                        claim_row = self.page.locator(f'div.columns:has(span:has-text("{variation}"))').first
+                        if claim_row.is_visible(timeout=2000):
+                            all_links = claim_row.locator('a')
+                            link_count = all_links.count()
+
+                            # Check if any link is a valid claim detail link
+                            for i in range(link_count):
+                                link = all_links.nth(i)
+                                href = link.get_attribute('href')
+                                if href and '/claims/' in href and not any(x in href for x in ['/board', '/jobs', '?']):
+                                    claim_id = href.split('/claims/')[-1]
+                                    if claim_id.isdigit():
+                                        # Found valid clickable link!
+                                        if attempt > 0:
+                                            self.logger.info(f"✓ Found clickable claim with format: {variation} (after {attempt + 1} attempts)")
+                                        else:
+                                            self.logger.info(f"✓ Found clickable claim with format: {variation}")
+                                        return variation
+
+                            # Found results but no valid claim link in row
+                            self.logger.info(f"  Found results for '{variation}' but no valid claim link in row, trying next variation...")
+                        else:
+                            self.logger.info(f"  Row not visible for '{variation}', trying next variation...")
+                    except Exception as e:
+                        self.logger.info(f"  Error checking link for '{variation}': {e}, trying next variation...")
+                else:
+                    self.logger.info(f"  No results for variation '{variation}', trying next...")
 
             if attempt < max_retries - 1:
-                self.logger.warning(f"  Claim {claim_number} not found (attempt {attempt + 1}), will retry...")
+                self.logger.warning(f"  Claim {claim_number} not found with any variation (attempt {attempt + 1}), will retry...")
 
-        raise SearchError(f"Claim {claim_number} not found after {max_retries} attempts (tried original, without suffix, and without hyphens)")
+        raise SearchError(f"Claim {claim_number} not found after {max_retries} attempts (tried variations: {variations})")
 
     def _has_claim_results(self) -> bool:
         """
