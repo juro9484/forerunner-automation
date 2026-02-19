@@ -164,9 +164,9 @@ Rules:
 """
 
         try:
-            # Call Claude
+            # Call Claude - using configurable model from Config.CLAUDE_MODEL
             response = self.client.messages.create(
-                model="claude-3-5-haiku-20241022",
+                model=Config.CLAUDE_MODEL,
                 max_tokens=1024,
                 messages=[
                     {

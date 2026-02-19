@@ -67,8 +67,9 @@ class ContractParser:
     for creating new claims in Claim Titan CRM.
     """
 
-    # Claude model to use (Opus has best vision capabilities for PDFs)
-    MODEL = "claude-opus-4-5-20251101"
+    # Claude model to use - configurable via CLAUDE_VISION_MODEL env var
+    # Defaults to Opus which has superior vision capabilities for PDFs
+    MODEL = Config.CLAUDE_VISION_MODEL
 
     # System prompt for contract parsing
     EXTRACTION_PROMPT = """You are extracting client and claim information from an insurance public adjuster contract.

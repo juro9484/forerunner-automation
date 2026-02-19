@@ -42,6 +42,21 @@ class Config:
     OPENAI_API_KEY: Optional[str] = os.getenv("OPENAI_API_KEY")
     ANTHROPIC_API_KEY: Optional[str] = os.getenv("ANTHROPIC_API_KEY")
 
+    # Claude Model Configuration (with automatic fallback)
+    # Primary model to use - can be overridden via CLAUDE_MODEL env var
+    CLAUDE_MODEL: str = os.getenv("CLAUDE_MODEL", "claude-3-5-sonnet-20241022")
+
+    # Vision model for PDF/image processing - can be overridden via CLAUDE_VISION_MODEL env var
+    # Defaults to Opus 4.5 which has superior vision capabilities
+    CLAUDE_VISION_MODEL: str = os.getenv("CLAUDE_VISION_MODEL", "claude-opus-4-5-20251101")
+
+    # Fallback models if primary fails (tries in order)
+    CLAUDE_FALLBACK_MODELS: list = [
+        "claude-3-5-sonnet-20241022",
+        "claude-3-opus-20240229",
+        "claude-3-sonnet-20240229",
+    ]
+
     # Application Configuration
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
     BROWSER_HEADLESS: bool = os.getenv("BROWSER_HEADLESS", "true").lower() == "true"

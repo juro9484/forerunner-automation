@@ -51,8 +51,8 @@ class EmailSummarizer:
     for posting to the Claim Titan CRM.
     """
 
-    # Claude model to use (3.5 Haiku - smart, fast, and cost-effective for summarization)
-    MODEL = "claude-3-5-haiku-20241022"
+    # Claude model to use - now configurable via environment variable
+    MODEL = Config.CLAUDE_MODEL
 
     # System prompt that defines Claude's role and output format
     SYSTEM_PROMPT = """You are an AI assistant for Forerunner Claims, an insurance claims processing company.
