@@ -185,8 +185,18 @@ def main():
                             email.mark_as_read(email_data.email_id)
                             continue
 
-                        # Determine if this is a contract email
-                        is_contract = "contract" in email_data.subject.lower()
+                        # Determine if this is a contract email (new claim creation)
+                        # Check for various keywords that indicate a new claim should be created
+                        contract_keywords = [
+                            "contract",
+                            "new claim",
+                            "new contract",
+                            "add claim",
+                            "create claim",
+                            "add contract"
+                        ]
+                        subject_lower = email_data.subject.lower()
+                        is_contract = any(keyword in subject_lower for keyword in contract_keywords)
 
                         if is_contract:
                             # Process as contract (create new claim)
