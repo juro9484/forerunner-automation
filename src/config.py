@@ -93,6 +93,7 @@ class Config:
     FEATURE_COMMENTS_ENABLED: bool = os.getenv("FEATURE_COMMENTS_ENABLED", "true").lower() == "true"
     COMMENTS_UPLOAD_ATTACHMENTS: bool = os.getenv("COMMENTS_UPLOAD_ATTACHMENTS", "false").lower() == "true"
     FEATURE_CONTRACT_ADDITION_ENABLED: bool = os.getenv("FEATURE_CONTRACT_ADDITION_ENABLED", "true").lower() == "true"
+    FEATURE_CHECK_DEPOSIT_ENABLED: bool = os.getenv("FEATURE_CHECK_DEPOSIT_ENABLED", "true").lower() == "true"
 
     # Email Notification Configuration
     NOTIFICATIONS_ENABLED: bool = os.getenv("NOTIFICATIONS_ENABLED", "false").lower() == "true"

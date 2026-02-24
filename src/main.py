@@ -17,6 +17,7 @@ from adapters.email.outlook.adapter import OutlookAdapter
 from adapters.crm.claim_titan.adapter import ClaimTitanAdapter
 from summarizer import EmailSummarizer
 from contract_parser import ContractParser
+from check_parser import CheckParser
 from email_database import EmailDatabase
 from health_checker import HealthChecker
 from metrics_tracker import MetricsTracker
@@ -149,6 +150,7 @@ def main():
         # Initialize AI components
         summarizer = EmailSummarizer()
         contract_parser = ContractParser()
+        check_parser = CheckParser()
 
         # Initialize database
         database = EmailDatabase()
@@ -185,21 +187,121 @@ def main():
                             email.mark_as_read(email_data.email_id)
                             continue
 
-                        # Determine if this is a contract email (new claim creation)
-                        # Check for various keywords that indicate a new claim should be created
+                        # Determine email type based on subject keywords
+                        subject_lower = email_data.subject.lower()
+
+                        # Check keywords
+                        check_keywords = [
+                            "check",
+                            "checks",
+                            "payment",
+                            "new check",
+                            "carrier check",
+                            "new payment"
+                        ]
+                        is_check = any(keyword in subject_lower for keyword in check_keywords)
+
+                        # Contract keywords (removed "new" to avoid conflicts with "new check")
                         contract_keywords = [
                             "contract",
                             "new claim",
                             "new contract",
                             "add claim",
                             "create claim",
-                            "add contract",
-                            "new"
+                            "add contract"
                         ]
-                        subject_lower = email_data.subject.lower()
-                        is_contract = any(keyword in subject_lower for keyword in contract_keywords)
+                        is_contract = any(keyword in subject_lower for keyword in contract_keywords) and not is_check
 
-                        if is_contract:
+                        if is_check:
+                            # Process as check deposit (add carrier checks)
+                            logger.info("Processing as CHECK DEPOSIT email...")
+
+                            check_feature = crm.get_feature('check_deposit')
+                            if not check_feature:
+                                logger.warning("Check deposit feature not enabled, skipping")
+                                continue
+
+                            # Find all PDF attachments (each PDF = one check)
+                            if not email_data.attachments:
+                                logger.warning("Check email has no attachments, skipping")
+                                continue
+
+                            pdf_attachments = [att for att in email_data.attachments
+                                             if att.filename.lower().endswith('.pdf')]
+                            if not pdf_attachments:
+                                logger.warning("No PDF attachments found in check email")
+                                continue
+
+                            logger.info(f"Found {len(pdf_attachments)} check PDF(s) to process")
+
+                            checks_processed = 0
+                            checks_failed = 0
+
+                            # Process each check PDF
+                            for pdf_attachment in pdf_attachments:
+                                try:
+                                    logger.info(f"\n  Processing check: {pdf_attachment.filename}")
+
+                                    # Parse check data
+                                    check_data = check_parser.parse_check(pdf_attachment.file_path)
+                                    if not check_data:
+                                        logger.error(f"  ✗ Failed to parse check: {pdf_attachment.filename}")
+                                        checks_failed += 1
+                                        continue
+
+                                    # Check confidence threshold
+                                    if check_data.overall_confidence < 80:
+                                        logger.warning(f"  ✗ Check confidence too low ({check_data.overall_confidence}%) - skipping auto-processing")
+                                        logger.warning(f"      Manual review required for: {pdf_attachment.filename}")
+                                        checks_failed += 1
+                                        continue
+
+                                    # Add check to ClaimTitan
+                                    result = check_feature.process(check_data, pdf_attachment.file_path)
+
+                                    if result.success:
+                                        logger.info(f"  ✓ Added check ${check_data.check_amount} to claim {check_data.claim_number}")
+                                        checks_processed += 1
+
+                                        # Clean up: Delete check PDF after successful upload
+                                        try:
+                                            pdf_attachment.file_path.unlink()
+                                            logger.info(f"  ✓ Deleted check PDF: {pdf_attachment.filename}")
+                                        except Exception as e:
+                                            logger.warning(f"  ! Failed to delete check PDF: {e}")
+
+                                    else:
+                                        logger.error(f"  ✗ Failed to add check: {result.error_message}")
+                                        checks_failed += 1
+
+                                except Exception as e:
+                                    logger.error(f"  ✗ Error processing check {pdf_attachment.filename}: {e}", exc_info=True)
+                                    checks_failed += 1
+                                    continue
+
+                            # Mark email as processed
+                            status = "success" if checks_processed > 0 else "failed"
+                            error_msg = None if checks_processed > 0 else f"Failed to process {checks_failed} check(s)"
+
+                            database.mark_processed(
+                                email_id=email_data.email_id,
+                                claim_number=f"{checks_processed} check(s)",
+                                sender=email_data.sender,
+                                subject=email_data.subject,
+                                received_timestamp=email_data.timestamp,
+                                status=status,
+                                error_message=error_msg
+                            )
+
+                            if checks_processed > 0:
+                                email.mark_as_read(email_data.email_id)
+                                processed_count += 1
+                            else:
+                                failed_count += 1
+
+                            logger.info(f"\n  Check processing summary: {checks_processed} succeeded, {checks_failed} failed")
+
+                        elif is_contract:
                             # Process as contract (create new claim)
                             logger.info("Processing as CONTRACT email...")
 
@@ -239,6 +341,13 @@ def main():
                                 email.mark_as_read(email_data.email_id)
                                 metrics.record_claim_created(success=True)
                                 processed_count += 1
+
+                                # Clean up: Delete contract PDF after successful claim creation
+                                try:
+                                    pdf_attachment.file_path.unlink()
+                                    logger.info(f"✓ Deleted contract PDF: {pdf_attachment.filename}")
+                                except Exception as e:
+                                    logger.warning(f"! Failed to delete contract PDF: {e}")
                             else:
                                 logger.error(f"✗ Failed to create claim: {result.error_message}")
                                 database.mark_processed(

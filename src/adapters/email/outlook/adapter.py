@@ -317,23 +317,34 @@ class OutlookAdapter:
             # Extract claim number from subject
             claim_number = self._extract_claim_number(subject)
 
-            # Check if this is a contract email (new client)
-            # Check for various keywords that indicate a new claim should be created
+            # Check if this is a special email type (contract or check)
+            subject_lower = subject.lower()
+
+            # Check for carrier check emails
+            check_keywords = [
+                "check",
+                "checks",
+                "payment",
+                "new check",
+                "carrier check",
+                "new payment"
+            ]
+            is_check_email = any(keyword in subject_lower for keyword in check_keywords)
+
+            # Check for contract emails (new claim creation)
             contract_keywords = [
                 "contract",
                 "new claim",
                 "new contract",
                 "add claim",
                 "create claim",
-                "add contract",
-                "new"
+                "add contract"
             ]
-            subject_lower = subject.lower()
             is_contract_email = any(keyword in subject_lower for keyword in contract_keywords)
 
-            # Skip if no claim number AND not a contract email
-            if not claim_number and not is_contract_email:
-                self.logger.debug(f"No claim number or contract keyword in subject: {subject}")
+            # Skip if no claim number AND not a contract email AND not a check email
+            if not claim_number and not is_contract_email and not is_check_email:
+                self.logger.debug(f"No claim number, contract keyword, or check keyword in subject: {subject}")
                 return None
 
             # Extract email body

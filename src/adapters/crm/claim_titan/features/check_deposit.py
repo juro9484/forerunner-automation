@@ -1,0 +1,269 @@
+"""
+Check Deposit Feature for ClaimTitan.
+Navigates to claim, adds carrier check with extracted data.
+"""
+
+import logging
+from datetime import datetime
+from pathlib import Path
+from typing import Optional
+
+from playwright.sync_api import Page
+
+from ..exceptions import NavigationError, FormSubmissionError
+from ..result import ClaimTitanResult
+from check_parser import CheckData
+
+
+class CheckDepositFeature:
+    """
+    Adds carrier checks to ClaimTitan claims.
+    Navigates: claim → Accounting → Carrier Checks → Add Check form
+    """
+
+    def __init__(self, adapter):
+        """
+        Initialize check deposit feature.
+
+        Args:
+            adapter: ClaimTitanAdapter instance
+        """
+        self.adapter = adapter
+        self.config = adapter.config
+        self.logger = logging.getLogger(__name__)
+
+    def process(self, check_data: CheckData, check_pdf_path: Path) -> ClaimTitanResult:
+        """
+        Add a carrier check to ClaimTitan.
+
+        Args:
+            check_data: Extracted check data
+            check_pdf_path: Path to original check PDF (for upload)
+
+        Returns:
+            ClaimTitanResult with success/failure status
+        """
+        try:
+            self.logger.info(f"Adding carrier check to claim {check_data.claim_number}")
+            self.logger.info(f"  Amount: ${check_data.check_amount}")
+            self.logger.info(f"  Check #: {check_data.check_number}")
+            self.logger.info(f"  Confidence: {check_data.overall_confidence}%")
+
+            # Navigate to carrier checks page
+            claim_url = self._navigate_to_carrier_checks(check_data.claim_number)
+
+            # Click "Add Check" button
+            self._click_add_check_button()
+
+            # Fill the form
+            self._fill_check_form(check_data, check_pdf_path)
+
+            # Submit form
+            self._submit_form()
+
+            self.logger.info(f"✓ Successfully added carrier check to claim {check_data.claim_number}")
+
+            return ClaimTitanResult(
+                claim_number=check_data.claim_number,
+                note_title=f"Carrier Check - ${check_data.check_amount}",
+                note_description=f"Check #{check_data.check_number} from {check_data.payer}",
+                success=True,
+                timestamp=datetime.now(),
+                error_message=None,
+                screenshot_path=None,
+                claim_url=claim_url
+            )
+
+        except Exception as e:
+            error_msg = f"Failed to add carrier check: {str(e)}"
+            self.logger.error(error_msg, exc_info=True)
+
+            # Take screenshot for debugging
+            screenshot_path = None
+            try:
+                screenshot_dir = self.config.SCREENSHOTS_DIR
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                screenshot_path = screenshot_dir / f"check_deposit_error_{check_data.claim_number}_{timestamp}.png"
+                self.adapter.page.screenshot(path=str(screenshot_path))
+                self.logger.info(f"Error screenshot saved: {screenshot_path}")
+            except Exception:
+                pass
+
+            return ClaimTitanResult(
+                claim_number=check_data.claim_number,
+                note_title=f"Carrier Check - ${check_data.check_amount}",
+                note_description=f"Check #{check_data.check_number} from {check_data.payer}",
+                success=False,
+                timestamp=datetime.now(),
+                error_message=error_msg,
+                screenshot_path=screenshot_path
+            )
+
+    def _navigate_to_carrier_checks(self, claim_number: str) -> str:
+        """
+        Navigate to the Carrier Checks page for a claim.
+
+        Args:
+            claim_number: Claim number to navigate to
+
+        Returns:
+            Claim URL
+
+        Raises:
+            NavigationError: If navigation fails
+        """
+        try:
+            # Navigate to claim (will be on Overview tab)
+            claim_url = f"https://claimtitan.com/claims/{claim_number}"
+            self.adapter.page.goto(claim_url)
+            self.adapter.page.wait_for_load_state('load', timeout=30000)
+            self.adapter.page.wait_for_timeout(2000)
+
+            self.logger.info(f"  Navigated to claim overview")
+
+            # Click Accounting tab
+            self.logger.info(f"  Clicking Accounting tab...")
+            accounting_link = self.adapter.page.locator('a[href*="/worksheet"]:has-text("Accounting")').first
+            accounting_link.wait_for(state='visible', timeout=10000)
+            accounting_link.click()
+            self.adapter.page.wait_for_load_state('load', timeout=30000)
+            self.adapter.page.wait_for_timeout(2000)
+
+            self.logger.info(f"  ✓ On Accounting page")
+
+            # Click Carrier Checks sub-tab
+            self.logger.info(f"  Clicking Carrier Checks tab...")
+            carrier_checks_link = self.adapter.page.locator('a[href*="/payment"]:has-text("Carrier")').first
+            carrier_checks_link.wait_for(state='visible', timeout=10000)
+            carrier_checks_link.click()
+            self.adapter.page.wait_for_load_state('load', timeout=30000)
+            self.adapter.page.wait_for_timeout(2000)
+
+            self.logger.info(f"  ✓ On Carrier Checks page")
+
+            return claim_url
+
+        except Exception as e:
+            raise NavigationError(f"Failed to navigate to Carrier Checks page: {e}")
+
+    def _click_add_check_button(self):
+        """Click the 'Add Check' button to open the form modal."""
+        try:
+            self.logger.info(f"  Clicking 'Add Check' button...")
+
+            # Find and click the Add Check button
+            add_button = self.adapter.page.locator('button:has-text("Add")').first
+            add_button.wait_for(state='visible', timeout=10000)
+            add_button.click()
+
+            # Wait for modal/slideover to open
+            self.adapter.page.wait_for_timeout(2000)
+
+            # Verify form is visible
+            form = self.adapter.page.locator('form').first
+            form.wait_for(state='visible', timeout=10000)
+
+            self.logger.info(f"  ✓ Add Check form opened")
+
+        except Exception as e:
+            raise NavigationError(f"Failed to open Add Check form: {e}")
+
+    def _fill_check_form(self, check_data: CheckData, check_pdf_path: Path):
+        """
+        Fill out the carrier check form.
+
+        Args:
+            check_data: Extracted check data
+            check_pdf_path: Path to check PDF for upload
+        """
+        try:
+            self.logger.info(f"  Filling check form...")
+
+            # Amount
+            amount_input = self.adapter.page.locator('input[wire\\:model="form.amount"]').first
+            amount_input.wait_for(state='visible', timeout=10000)
+            amount_input.fill(check_data.check_amount)
+            self.logger.info(f"    ✓ Amount: ${check_data.check_amount}")
+
+            # Check Number (Reference ID)
+            ref_input = self.adapter.page.locator('input[wire\\:model="form.reference_id"]').first
+            ref_input.fill(check_data.check_number)
+            self.logger.info(f"    ✓ Check #: {check_data.check_number}")
+
+            # Payment Name (use payer)
+            name_input = self.adapter.page.locator('input[wire\\:model="form.name"]').first
+            name_input.fill(check_data.payer)
+            self.logger.info(f"    ✓ Payment Name: {check_data.payer}")
+
+            # Notes (include insured name and confidence info)
+            notes_text = f"Insured: {check_data.insured_name}\nAuto-extracted with {check_data.overall_confidence}% confidence"
+            if check_data.notes and check_data.notes != "No issues":
+                notes_text += f"\nNotes: {check_data.notes}"
+
+            notes_textarea = self.adapter.page.locator('textarea[wire\\:model="form.notes"]').first
+            notes_textarea.fill(notes_text)
+            self.logger.info(f"    ✓ Notes added")
+
+            # Payment Type (default is "check", no need to change)
+
+            # Status = Received (value="1")
+            status_select = self.adapter.page.locator('select[wire\\:model="form.status"]').first
+            status_select.select_option("1")
+            self.logger.info(f"    ✓ Status: Received")
+
+            # Date Issued
+            date_input = self.adapter.page.locator('input[wire\\:model="form.issue_date"]').first
+            date_input.fill(check_data.check_date)
+            self.logger.info(f"    ✓ Date Issued: {check_data.check_date}")
+
+            # Date Received (use today's date)
+            today = datetime.now().strftime('%Y-%m-%d')
+            received_input = self.adapter.page.locator('input[wire\\:model="form.date_received"]').first
+            received_input.fill(today)
+            self.logger.info(f"    ✓ Date Received: {today}")
+
+            # Click Images tab to reveal file upload section
+            self.logger.info(f"  Switching to Images tab...")
+            images_tab = self.adapter.page.locator('button:has-text("Images")').first
+            images_tab.click()
+            self.adapter.page.wait_for_timeout(1000)
+
+            # Upload front image (the check PDF)
+            self.logger.info(f"  Uploading check PDF...")
+            file_input = self.adapter.page.locator('input[wire\\:model="form.front_file"]').first
+            file_input.set_input_files(str(check_pdf_path))
+            self.adapter.page.wait_for_timeout(2000)  # Wait for upload
+            self.logger.info(f"    ✓ Check PDF uploaded")
+
+            self.logger.info(f"  ✓ Form filled successfully")
+
+        except Exception as e:
+            raise FormSubmissionError(f"Failed to fill check form: {e}")
+
+    def _submit_form(self):
+        """Submit the carrier check form."""
+        try:
+            self.logger.info(f"  Submitting form...")
+
+            # Find and click Save button
+            save_button = self.adapter.page.locator('button[type="submit"]:has-text("Save")').first
+            save_button.wait_for(state='visible', timeout=10000)
+            save_button.click()
+
+            # Wait for submission to complete
+            self.adapter.page.wait_for_timeout(3000)
+
+            # Verify success (form should close or redirect)
+            # If form is still visible, submission may have failed
+            try:
+                form = self.adapter.page.locator('form').first
+                if form.is_visible(timeout=2000):
+                    self.logger.warning("Form still visible after submit - may have failed")
+            except:
+                # Form not visible = success
+                pass
+
+            self.logger.info(f"  ✓ Form submitted")
+
+        except Exception as e:
+            raise FormSubmissionError(f"Failed to submit check form: {e}")

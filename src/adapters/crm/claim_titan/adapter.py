@@ -17,6 +17,7 @@ from .exceptions import ClaimTitanError, LoginError, SearchError, PostError, Bro
 # Import features (imported after exceptions to avoid circular imports)
 from .features.comments import CommentsFeature
 from .features.contract_addition import ContractAdditionFeature
+from .features.check_deposit import CheckDepositFeature
 
 
 class ClaimTitanAdapter:
@@ -80,6 +81,11 @@ class ClaimTitanAdapter:
         if getattr(self.config, 'FEATURE_CONTRACT_ADDITION_ENABLED', True):
             self.features['contract_addition'] = ContractAdditionFeature(adapter=self)
             self.logger.info("Loaded ContractAdditionFeature")
+
+        # Check deposit feature
+        if getattr(self.config, 'FEATURE_CHECK_DEPOSIT_ENABLED', True):
+            self.features['check_deposit'] = CheckDepositFeature(adapter=self)
+            self.logger.info("Loaded CheckDepositFeature")
 
     def get_feature(self, feature_name: str):
         """
