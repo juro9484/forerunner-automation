@@ -155,9 +155,6 @@ def main():
 
         logger.info("✓ All components initialized")
 
-        # Send startup notification
-        send_startup_notification()
-
         # Main processing loop
         logger.info("Starting email processing...")
 
