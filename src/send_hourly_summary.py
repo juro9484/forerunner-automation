@@ -38,45 +38,43 @@ def main():
         period_end = now.strftime('%Y-%m-%d %H:%M')
         period_start = one_hour_ago.strftime('%Y-%m-%d %H:%M')
 
-        # Query database for hourly stats
-        conn = database.get_connection()
-        cursor = conn.cursor()
+        # Query database for hourly stats using context manager
+        with database._get_connection() as conn:
+            cursor = conn.cursor()
 
-        # Count emails processed in last hour
-        cursor.execute("""
-            SELECT
-                COUNT(*) as total,
-                SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as successful,
-                SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed
-            FROM processed_emails
-            WHERE processed_timestamp >= ?
-        """, (one_hour_ago.isoformat(),))
+            # Count emails processed in last hour
+            cursor.execute("""
+                SELECT
+                    COUNT(*) as total,
+                    SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as successful,
+                    SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed
+                FROM processed_emails
+                WHERE processed_timestamp >= ?
+            """, (one_hour_ago.isoformat(),))
 
-        row = cursor.fetchone()
-        total_processed = row[0] if row[0] else 0
-        emails_processed = row[1] if row[1] else 0
-        emails_failed = row[2] if row[2] else 0
+            row = cursor.fetchone()
+            total_processed = row[0] if row[0] else 0
+            emails_processed = row[1] if row[1] else 0
+            emails_failed = row[2] if row[2] else 0
 
-        # Get breakdown by type (rough approximation based on claim_number)
-        cursor.execute("""
-            SELECT COUNT(*)
-            FROM processed_emails
-            WHERE processed_timestamp >= ?
-            AND status = 'success'
-            AND claim_number != 'N/A'
-        """, (one_hour_ago.isoformat(),))
-        notes_posted = cursor.fetchone()[0] or 0
+            # Get breakdown by type (rough approximation based on claim_number)
+            cursor.execute("""
+                SELECT COUNT(*)
+                FROM processed_emails
+                WHERE processed_timestamp >= ?
+                AND status = 'success'
+                AND claim_number != 'N/A'
+            """, (one_hour_ago.isoformat(),))
+            notes_posted = cursor.fetchone()[0] or 0
 
-        cursor.execute("""
-            SELECT COUNT(*)
-            FROM processed_emails
-            WHERE processed_timestamp >= ?
-            AND status = 'success'
-            AND claim_number = 'N/A'
-        """, (one_hour_ago.isoformat(),))
-        claims_created = cursor.fetchone()[0] or 0
-
-        conn.close()
+            cursor.execute("""
+                SELECT COUNT(*)
+                FROM processed_emails
+                WHERE processed_timestamp >= ?
+                AND status = 'success'
+                AND claim_number = 'N/A'
+            """, (one_hour_ago.isoformat(),))
+            claims_created = cursor.fetchone()[0] or 0
 
         # Initialize email notifier
         notifier = EmailNotifier(
