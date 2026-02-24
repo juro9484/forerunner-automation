@@ -95,6 +95,31 @@ def send_failure_notification(error_message: str, error_details: str = None):
         logging.getLogger(__name__).error(f"Failed to send notification email: {e}")
 
 
+def send_startup_notification():
+    """Send startup notification to verify email is working."""
+    if not Config.NOTIFICATIONS_ENABLED:
+        return
+
+    try:
+        from datetime import datetime
+        notifier = EmailNotifier(
+            smtp_server=Config.NOTIFICATION_SMTP_SERVER,
+            smtp_port=Config.NOTIFICATION_SMTP_PORT,
+            from_email=Config.NOTIFICATION_FROM_EMAIL,
+            from_password=Config.NOTIFICATION_FROM_PASSWORD,
+            to_emails=Config.NOTIFICATION_TO_EMAILS
+        )
+
+        notifier.send_failure_alert(
+            client_id=Config.CLIENT_ID,
+            error_message=f"✅ Service Started Successfully at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+            error_details="Email notifications are working correctly. You will receive alerts if the service fails."
+        )
+        logging.getLogger(__name__).info("Startup notification sent")
+    except Exception as e:
+        logging.getLogger(__name__).error(f"Failed to send startup notification: {e}")
+
+
 def main():
     """Main application loop."""
     logger = setup_logging()
@@ -130,6 +155,9 @@ def main():
         database = EmailDatabase()
 
         logger.info("✓ All components initialized")
+
+        # Send startup notification
+        send_startup_notification()
 
         # Main processing loop
         logger.info("Starting email processing...")
