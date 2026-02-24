@@ -101,7 +101,6 @@ def send_startup_notification():
         return
 
     try:
-        from datetime import datetime
         notifier = EmailNotifier(
             smtp_server=Config.NOTIFICATION_SMTP_SERVER,
             smtp_port=Config.NOTIFICATION_SMTP_PORT,
@@ -110,10 +109,10 @@ def send_startup_notification():
             to_emails=Config.NOTIFICATION_TO_EMAILS
         )
 
-        notifier.send_failure_alert(
+        notifier.send_success_alert(
             client_id=Config.CLIENT_ID,
-            error_message=f"✅ Service Started Successfully at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
-            error_details="Email notifications are working correctly. You will receive alerts if the service fails."
+            message="Service Started Successfully",
+            details="Email notifications are working correctly. You will receive alerts if the service fails."
         )
         logging.getLogger(__name__).info("Startup notification sent")
     except Exception as e:

@@ -148,6 +148,62 @@ Service status: sudo systemctl status forerunner-monitor
 
         return self.send_email(subject, body_html, body_text)
 
+    def send_success_alert(
+        self,
+        client_id: str,
+        message: str,
+        details: Optional[str] = None
+    ) -> bool:
+        """
+        Send success/startup notification email.
+
+        Args:
+            client_id: Client identifier
+            message: Success message
+            details: Additional details (optional)
+
+        Returns:
+            True if sent successfully
+        """
+        subject = f"✅ {client_id} - {message}"
+
+        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        details_html = f'<p style="background: #e8f5e9; padding: 10px; border-radius: 5px;">{details}</p>' if details else ''
+        details_text = f'\n{details}' if details else ''
+
+        body_html = f"""
+        <html>
+        <body style="font-family: Arial, sans-serif;">
+            <h2 style="color: #4caf50;">✅ Success Notification</h2>
+            <p><strong>Client:</strong> {client_id}</p>
+            <p><strong>Time:</strong> {timestamp}</p>
+            <p><strong>Message:</strong> {message}</p>
+
+            {details_html}
+
+            <hr>
+            <p style="color: #666; font-size: 12px;">
+                View logs: <code>tail -50 logs/{client_id}.log</code><br>
+                Service status: <code>sudo systemctl status forerunner-monitor</code>
+            </p>
+        </body>
+        </html>
+        """
+
+        body_text = f"""
+SUCCESS NOTIFICATION
+
+Client: {client_id}
+Time: {timestamp}
+Message: {message}
+{details_text}
+
+View logs: tail -50 logs/{client_id}.log
+Service status: sudo systemctl status forerunner-monitor
+        """
+
+        return self.send_email(subject, body_html, body_text)
+
     def send_hourly_summary(
         self,
         client_id: str,
