@@ -28,24 +28,55 @@ def main():
     logger = logging.getLogger(__name__)
 
     try:
-        # Read metrics from last hour
-        metrics = MetricsTracker()
-
-        # Get hourly stats (MetricsTracker stores daily, so we approximate)
-        # In production, you'd read from database for exact hourly counts
-        # For now, we'll use the daily metrics as a proxy
-        notes_posted_success = getattr(metrics, 'notes_posted_success', 0)
-        notes_posted_failed = getattr(metrics, 'notes_posted_failed', 0)
-        claims_created_success = getattr(metrics, 'claims_created_success', 0)
-        claims_created_failed = getattr(metrics, 'claims_created_failed', 0)
-
-        emails_processed = notes_posted_success + claims_created_success
-        emails_failed = notes_posted_failed + claims_created_failed
+        # Query database for emails processed in last hour
+        from email_database import EmailDatabase
+        database = EmailDatabase()
 
         # Time period
         now = datetime.now()
+        one_hour_ago = now - timedelta(hours=1)
         period_end = now.strftime('%Y-%m-%d %H:%M')
-        period_start = (now - timedelta(hours=1)).strftime('%Y-%m-%d %H:%M')
+        period_start = one_hour_ago.strftime('%Y-%m-%d %H:%M')
+
+        # Query database for hourly stats
+        conn = database.get_connection()
+        cursor = conn.cursor()
+
+        # Count emails processed in last hour
+        cursor.execute("""
+            SELECT
+                COUNT(*) as total,
+                SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as successful,
+                SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed
+            FROM processed_emails
+            WHERE processed_timestamp >= ?
+        """, (one_hour_ago.isoformat(),))
+
+        row = cursor.fetchone()
+        total_processed = row[0] if row[0] else 0
+        emails_processed = row[1] if row[1] else 0
+        emails_failed = row[2] if row[2] else 0
+
+        # Get breakdown by type (rough approximation based on claim_number)
+        cursor.execute("""
+            SELECT COUNT(*)
+            FROM processed_emails
+            WHERE processed_timestamp >= ?
+            AND status = 'success'
+            AND claim_number != 'N/A'
+        """, (one_hour_ago.isoformat(),))
+        notes_posted = cursor.fetchone()[0] or 0
+
+        cursor.execute("""
+            SELECT COUNT(*)
+            FROM processed_emails
+            WHERE processed_timestamp >= ?
+            AND status = 'success'
+            AND claim_number = 'N/A'
+        """, (one_hour_ago.isoformat(),))
+        claims_created = cursor.fetchone()[0] or 0
+
+        conn.close()
 
         # Initialize email notifier
         notifier = EmailNotifier(
@@ -61,8 +92,8 @@ def main():
             client_id=Config.CLIENT_ID,
             emails_processed=emails_processed,
             emails_failed=emails_failed,
-            notes_posted=notes_posted_success,
-            claims_created=claims_created_success,
+            notes_posted=notes_posted,
+            claims_created=claims_created,
             period_start=period_start,
             period_end=period_end
         )
