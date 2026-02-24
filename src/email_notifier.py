@@ -110,15 +110,19 @@ class EmailNotifier:
         """
         subject = f"🚨 ALERT: {client_id} Service Failure"
 
+        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        details_html = f'<h3>Details:</h3><pre style="background: #f5f5f5; padding: 10px; overflow-x: auto;">{error_details}</pre>' if error_details else ''
+        details_text = f'Details:\n{error_details}' if error_details else ''
+
         body_html = f"""
         <html>
         <body style="font-family: Arial, sans-serif;">
             <h2 style="color: #d32f2f;">⚠️ Service Failure Alert</h2>
             <p><strong>Client:</strong> {client_id}</p>
-            <p><strong>Time:</strong> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
+            <p><strong>Time:</strong> {timestamp}</p>
             <p><strong>Error:</strong> {error_message}</p>
 
-            {f'<h3>Details:</h3><pre style="background: #f5f5f5; padding: 10px; overflow-x: auto;">{error_details}</pre>' if error_details else ''}
+            {details_html}
 
             <hr>
             <p style="color: #666; font-size: 12px;">
@@ -133,10 +137,10 @@ class EmailNotifier:
 SERVICE FAILURE ALERT
 
 Client: {client_id}
-Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+Time: {timestamp}
 Error: {error_message}
 
-{f'Details:\n{error_details}' if error_details else ''}
+{details_text}
 
 Check logs: tail -50 logs/{client_id}.log
 Service status: sudo systemctl status forerunner-monitor
