@@ -70,16 +70,29 @@ class Config:
     MAX_RETRIES: int = int(os.getenv("MAX_RETRIES", "3"))
 
     # Paths
+    # PROJECT_ROOT = where the code lives (e.g., /opt/forerunner-automation)
     PROJECT_ROOT: Path = Path(__file__).parent.parent
-    LOGS_DIR: Path = PROJECT_ROOT / "logs"
-    SCREENSHOTS_DIR: Path = PROJECT_ROOT / "screenshots"
-    DATA_DIR: Path = PROJECT_ROOT / "data"
-    DATABASE_PATH: Path = DATA_DIR / "automation.db"
 
-    # Attachment handling
-    ATTACHMENTS_TEMP_DIR: Path = PROJECT_ROOT / "temp_attachments"
-    DOCUMENTS_DIR: Path = PROJECT_ROOT / "documents"
+    # DATA_ROOT = where client data lives (e.g., /opt/clients/forerunner)
+    # Uses current working directory, which systemd sets via WorkingDirectory
+    DATA_ROOT: Path = Path(os.getcwd())
+
+    # All data directories use DATA_ROOT so each client has separate data
+    LOGS_DIR: Path = DATA_ROOT / "logs"
+    SCREENSHOTS_DIR: Path = DATA_ROOT / "screenshots"
+    DATA_DIR: Path = DATA_ROOT / "data"
+    DATABASE_PATH: Path = DATA_DIR / "automation.db"
+    ATTACHMENTS_TEMP_DIR: Path = DATA_ROOT / "temp_attachments"
+    DOCUMENTS_DIR: Path = DATA_ROOT / "documents"
     UPLOAD_ATTACHMENTS_TO_CRM: bool = os.getenv("UPLOAD_ATTACHMENTS_TO_CRM", "false").lower() == "true"
+
+    # Client identification (for multi-client deployments)
+    CLIENT_ID: str = os.getenv("CLIENT_ID", "forerunner_claims")
+
+    # Feature Flags - enable/disable features per client
+    FEATURE_COMMENTS_ENABLED: bool = os.getenv("FEATURE_COMMENTS_ENABLED", "true").lower() == "true"
+    COMMENTS_UPLOAD_ATTACHMENTS: bool = os.getenv("COMMENTS_UPLOAD_ATTACHMENTS", "false").lower() == "true"
+    FEATURE_CONTRACT_ADDITION_ENABLED: bool = os.getenv("FEATURE_CONTRACT_ADDITION_ENABLED", "true").lower() == "true"
 
     @classmethod
     def validate(cls) -> bool:
