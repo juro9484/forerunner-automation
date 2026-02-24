@@ -4,6 +4,7 @@ Navigates to claim, adds carrier check with extracted data.
 """
 
 import logging
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -11,8 +12,20 @@ from typing import Optional
 from playwright.sync_api import Page
 
 from ..exceptions import NavigationError, FormSubmissionError
-from ..result import ClaimTitanResult
 from check_parser import CheckData
+
+
+@dataclass
+class ClaimTitanResult:
+    """Result of adding a check to ClaimTitan."""
+    claim_number: str
+    note_title: str
+    note_description: str
+    success: bool
+    timestamp: datetime
+    claim_url: Optional[str] = None
+    error_message: Optional[str] = None
+    screenshot_path: Optional[str] = None
 
 
 class CheckDepositFeature:
