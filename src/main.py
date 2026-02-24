@@ -254,6 +254,29 @@ def main():
                                         logger.warning(f"  ✗ Check confidence too low ({check_data.overall_confidence}%) - skipping auto-processing")
                                         logger.warning(f"      Manual review required for: {pdf_attachment.filename}")
                                         checks_failed += 1
+
+                                        # Send low confidence alert
+                                        try:
+                                            notifier = EmailNotifier(
+                                                smtp_server=Config.NOTIFICATION_SMTP_SERVER,
+                                                smtp_port=Config.NOTIFICATION_SMTP_PORT,
+                                                from_email=Config.NOTIFICATION_FROM_EMAIL,
+                                                from_password=Config.NOTIFICATION_FROM_PASSWORD,
+                                                to_emails=Config.NOTIFICATION_TO_EMAILS
+                                            )
+                                            notifier.send_check_alert(
+                                                client_id=Config.CLIENT_ID,
+                                                alert_type="low_confidence",
+                                                check_filename=pdf_attachment.filename,
+                                                check_amount=check_data.check_amount,
+                                                claim_number=check_data.claim_number,
+                                                confidence_score=check_data.overall_confidence,
+                                                payer=check_data.payer
+                                            )
+                                            logger.info(f"  ✓ Sent low confidence alert email")
+                                        except Exception as e:
+                                            logger.error(f"  ! Failed to send low confidence alert: {e}")
+
                                         continue
 
                                     # Add check to ClaimTitan
@@ -262,6 +285,7 @@ def main():
                                     if result.success:
                                         logger.info(f"  ✓ Added check ${check_data.check_amount} to claim {check_data.claim_number}")
                                         checks_processed += 1
+                                        metrics.record_check_deposited(success=True)
 
                                         # Clean up: Delete check PDF after successful upload
                                         try:
@@ -273,6 +297,29 @@ def main():
                                     else:
                                         logger.error(f"  ✗ Failed to add check: {result.error_message}")
                                         checks_failed += 1
+                                        metrics.record_check_deposited(success=False)
+
+                                        # Send processing failure alert
+                                        try:
+                                            notifier = EmailNotifier(
+                                                smtp_server=Config.NOTIFICATION_SMTP_SERVER,
+                                                smtp_port=Config.NOTIFICATION_SMTP_PORT,
+                                                from_email=Config.NOTIFICATION_FROM_EMAIL,
+                                                from_password=Config.NOTIFICATION_FROM_PASSWORD,
+                                                to_emails=Config.NOTIFICATION_TO_EMAILS
+                                            )
+                                            notifier.send_check_alert(
+                                                client_id=Config.CLIENT_ID,
+                                                alert_type="processing_failed",
+                                                check_filename=pdf_attachment.filename,
+                                                check_amount=check_data.check_amount,
+                                                claim_number=check_data.claim_number,
+                                                error_message=result.error_message,
+                                                payer=check_data.payer
+                                            )
+                                            logger.info(f"  ✓ Sent check processing failure alert email")
+                                        except Exception as e:
+                                            logger.error(f"  ! Failed to send failure alert: {e}")
 
                                 except Exception as e:
                                     logger.error(f"  ✗ Error processing check {pdf_attachment.filename}: {e}", exc_info=True)

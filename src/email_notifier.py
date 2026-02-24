@@ -211,6 +211,7 @@ Service status: sudo systemctl status forerunner-monitor
         emails_failed: int,
         notes_posted: int,
         claims_created: int,
+        checks_deposited: int,
         period_start: str,
         period_end: str
     ) -> bool:
@@ -223,6 +224,7 @@ Service status: sudo systemctl status forerunner-monitor
             emails_failed: Number of emails that failed
             notes_posted: Number of notes posted to claims
             claims_created: Number of new claims created
+            checks_deposited: Number of carrier checks deposited
             period_start: Start time of period
             period_end: End time of period
 
@@ -276,6 +278,10 @@ Service status: sudo systemctl status forerunner-monitor
                     <td style="padding: 10px; border: 1px solid #ddd;">Claims Created</td>
                     <td style="padding: 10px; text-align: right; border: 1px solid #ddd;">{claims_created}</td>
                 </tr>
+                <tr>
+                    <td style="padding: 10px; border: 1px solid #ddd;">Checks Deposited</td>
+                    <td style="padding: 10px; text-align: right; border: 1px solid #ddd;">{checks_deposited}</td>
+                </tr>
                 <tr style="background: #e8f5e9;">
                     <td style="padding: 10px; border: 1px solid #ddd; font-weight: bold;">Success Rate</td>
                     <td style="padding: 10px; text-align: right; border: 1px solid #ddd; font-weight: bold;">{success_rate:.1f}%</td>
@@ -303,10 +309,145 @@ Emails Processed: {emails_processed}
 Emails Failed: {emails_failed}
 Notes Posted: {notes_posted}
 Claims Created: {claims_created}
+Checks Deposited: {checks_deposited}
 Success Rate: {success_rate:.1f}%
 
 View logs: tail -50 logs/{client_id}.log
 Check metrics: cat logs/metrics.txt
+        """
+
+        return self.send_email(subject, body_html, body_text)
+
+    def send_check_alert(
+        self,
+        client_id: str,
+        alert_type: str,
+        check_filename: str,
+        check_amount: str = None,
+        claim_number: str = None,
+        confidence_score: int = None,
+        error_message: str = None,
+        payer: str = None
+    ) -> bool:
+        """
+        Send alert email for check processing issues.
+
+        Args:
+            client_id: Client identifier
+            alert_type: "low_confidence" or "processing_failed"
+            check_filename: Name of the check PDF file
+            check_amount: Check amount (if extracted)
+            claim_number: Claim number (if extracted)
+            confidence_score: Confidence score for low confidence alerts
+            error_message: Error message for failed processing
+            payer: Insurance company name (if extracted)
+
+        Returns:
+            True if sent successfully
+        """
+        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+        if alert_type == "low_confidence":
+            subject = f"⚠️ ALERT: {client_id} - Check Needs Manual Review"
+            status_color = "#ff9800"
+            status_emoji = "⚠️"
+            alert_title = "Low Confidence Check Extraction"
+            alert_message = f"A check was extracted with {confidence_score}% confidence (below 80% threshold). Manual review and entry required."
+        else:  # processing_failed
+            subject = f"❌ ALERT: {client_id} - Check Processing Failed"
+            status_color = "#f44336"
+            status_emoji = "❌"
+            alert_title = "Check Processing Failure"
+            alert_message = f"Failed to upload check to ClaimTitan."
+
+        # Build details table
+        details_rows = []
+        if check_amount:
+            details_rows.append(f"<tr><td style='padding: 8px; border: 1px solid #ddd;'><strong>Check Amount:</strong></td><td style='padding: 8px; border: 1px solid #ddd;'>${check_amount}</td></tr>")
+        if claim_number:
+            details_rows.append(f"<tr><td style='padding: 8px; border: 1px solid #ddd;'><strong>Claim Number:</strong></td><td style='padding: 8px; border: 1px solid #ddd;'>{claim_number}</td></tr>")
+        if payer:
+            details_rows.append(f"<tr><td style='padding: 8px; border: 1px solid #ddd;'><strong>Payer:</strong></td><td style='padding: 8px; border: 1px solid #ddd;'>{payer}</td></tr>")
+        if confidence_score is not None:
+            details_rows.append(f"<tr><td style='padding: 8px; border: 1px solid #ddd;'><strong>Confidence:</strong></td><td style='padding: 8px; border: 1px solid #ddd;'>{confidence_score}%</td></tr>")
+        if error_message:
+            details_rows.append(f"<tr><td style='padding: 8px; border: 1px solid #ddd;'><strong>Error:</strong></td><td style='padding: 8px; border: 1px solid #ddd;'>{error_message}</td></tr>")
+
+        details_table = "".join(details_rows) if details_rows else ""
+
+        body_html = f"""
+        <html>
+        <body style="font-family: Arial, sans-serif;">
+            <h2 style="color: {status_color};">{status_emoji} {alert_title}</h2>
+
+            <div style="background: #fff3cd; padding: 15px; border-left: 4px solid {status_color}; margin: 10px 0;">
+                <p style="margin: 0;"><strong>Client:</strong> {client_id}</p>
+                <p style="margin: 5px 0 0 0;"><strong>Time:</strong> {timestamp}</p>
+            </div>
+
+            <p>{alert_message}</p>
+
+            <h3>Check Details:</h3>
+            <table style="width: 100%; border-collapse: collapse; margin: 10px 0;">
+                <tr>
+                    <td style="padding: 8px; border: 1px solid #ddd;"><strong>PDF File:</strong></td>
+                    <td style="padding: 8px; border: 1px solid #ddd;">{check_filename}</td>
+                </tr>
+                {details_table}
+            </table>
+
+            <div style="background: #f5f5f5; padding: 15px; border-radius: 5px; margin: 20px 0;">
+                <h3 style="margin-top: 0;">Action Required:</h3>
+                <ul>
+                    <li>Review the check PDF in the server's temp directory</li>
+                    <li>Manually enter the check into ClaimTitan</li>
+                    <li>Check logs for more details: <code>tail -50 logs/{client_id}.log</code></li>
+                </ul>
+            </div>
+
+            <hr>
+            <p style="color: #666; font-size: 12px;">
+                This is an automated alert from Forerunner Claims Automation.<br>
+                PDF location: <code>temp_attachments/{check_filename}</code>
+            </p>
+        </body>
+        </html>
+        """
+
+        # Plain text version
+        details_text_rows = []
+        if check_amount:
+            details_text_rows.append(f"Check Amount: ${check_amount}")
+        if claim_number:
+            details_text_rows.append(f"Claim Number: {claim_number}")
+        if payer:
+            details_text_rows.append(f"Payer: {payer}")
+        if confidence_score is not None:
+            details_text_rows.append(f"Confidence: {confidence_score}%")
+        if error_message:
+            details_text_rows.append(f"Error: {error_message}")
+
+        details_text = "\n".join(details_text_rows) if details_text_rows else "No additional details"
+
+        body_text = f"""
+{alert_title.upper()}
+
+Client: {client_id}
+Time: {timestamp}
+
+{alert_message}
+
+Check Details:
+--------------
+PDF File: {check_filename}
+{details_text}
+
+Action Required:
+- Review the check PDF in the server's temp directory
+- Manually enter the check into ClaimTitan
+- Check logs: tail -50 logs/{client_id}.log
+
+PDF location: temp_attachments/{check_filename}
         """
 
         return self.send_email(subject, body_html, body_text)

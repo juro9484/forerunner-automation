@@ -58,15 +58,28 @@ def main():
             emails_failed = row[2] if row[2] else 0
 
             # Get breakdown by type (rough approximation based on claim_number)
+            # Check deposits have claim_number like "1 check(s)", "2 check(s)"
+            cursor.execute("""
+                SELECT COUNT(*)
+                FROM processed_emails
+                WHERE processed_timestamp >= ?
+                AND status = 'success'
+                AND claim_number LIKE '%check(s)%'
+            """, (one_hour_ago.isoformat(),))
+            checks_deposited = cursor.fetchone()[0] or 0
+
+            # Notes posted have claim numbers that are not 'N/A' and not check deposits
             cursor.execute("""
                 SELECT COUNT(*)
                 FROM processed_emails
                 WHERE processed_timestamp >= ?
                 AND status = 'success'
                 AND claim_number != 'N/A'
+                AND claim_number NOT LIKE '%check(s)%'
             """, (one_hour_ago.isoformat(),))
             notes_posted = cursor.fetchone()[0] or 0
 
+            # Claims created have claim_number = 'N/A'
             cursor.execute("""
                 SELECT COUNT(*)
                 FROM processed_emails
@@ -92,6 +105,7 @@ def main():
             emails_failed=emails_failed,
             notes_posted=notes_posted,
             claims_created=claims_created,
+            checks_deposited=checks_deposited,
             period_start=period_start,
             period_end=period_end
         )

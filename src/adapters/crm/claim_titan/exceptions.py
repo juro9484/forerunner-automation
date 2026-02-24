@@ -26,3 +26,13 @@ class PostError(ClaimTitanError):
 class BrowserError(ClaimTitanError):
     """Error with browser automation."""
     pass
+
+
+class NavigationError(ClaimTitanError):
+    """Error during page navigation."""
+    pass
+
+
+class FormSubmissionError(ClaimTitanError):
+    """Error during form submission."""
+    pass

@@ -48,6 +48,7 @@ class MetricsTracker:
             "total_emails": 0,
             "notes_posted": 0,
             "claims_created": 0,
+            "checks_deposited": 0,
             "successful": 0,
             "failed": 0,
             "last_update": datetime.now().isoformat()
@@ -84,6 +85,7 @@ PROCESSING STATS
 Total Emails Processed:  {self.metrics["total_emails"]}
 Notes Posted:            {self.metrics["notes_posted"]}
 Claims Created:          {self.metrics["claims_created"]}
+Checks Deposited:        {self.metrics.get("checks_deposited", 0)}
 
 SUCCESS RATE
 {'='*80}
@@ -138,6 +140,18 @@ STATUS
         self._save_metrics()
         self._write_text_file()
 
+    def record_check_deposited(self, success: bool = True):
+        """Record that a carrier check was deposited to Claim Titan."""
+        if "checks_deposited" not in self.metrics:
+            self.metrics["checks_deposited"] = 0
+        self.metrics["checks_deposited"] += 1
+        if success:
+            self.metrics["successful"] += 1
+        else:
+            self.metrics["failed"] += 1
+        self._save_metrics()
+        self._write_text_file()
+
     def record_failure(self):
         """Record a processing failure."""
         self.metrics["failed"] += 1
@@ -173,6 +187,7 @@ STATUS
                 "total_emails": 0,
                 "notes_posted": 0,
                 "claims_created": 0,
+                "checks_deposited": 0,
                 "successful": 0,
                 "failed": 0,
                 "last_update": now.isoformat()
