@@ -5,6 +5,8 @@ Coordinates email monitoring, AI summarization, and CRM automation.
 
 import logging
 import sys
+import traceback
+import requests
 from pathlib import Path
 
 # Add src to path for imports
@@ -18,6 +20,7 @@ from contract_parser import ContractParser
 from email_database import EmailDatabase
 from health_checker import HealthChecker
 from metrics_tracker import MetricsTracker
+from email_notifier import EmailNotifier
 
 
 def setup_logging():
@@ -46,6 +49,52 @@ def setup_logging():
     return logger
 
 
+def ping_healthchecks(status: str = ""):
+    """
+    Ping Healthchecks.io to indicate service is running.
+
+    Args:
+        status: Either "" (success), "/fail" (failure), or "/start" (starting)
+    """
+    if not Config.HEALTHCHECKS_ENABLED or not Config.HEALTHCHECKS_PING_URL:
+        return
+
+    try:
+        url = Config.HEALTHCHECKS_PING_URL + status
+        requests.get(url, timeout=10)
+    except Exception as e:
+        logging.getLogger(__name__).warning(f"Failed to ping Healthchecks.io: {e}")
+
+
+def send_failure_notification(error_message: str, error_details: str = None):
+    """
+    Send email notification about service failure.
+
+    Args:
+        error_message: Brief error description
+        error_details: Full error traceback
+    """
+    if not Config.NOTIFICATIONS_ENABLED:
+        return
+
+    try:
+        notifier = EmailNotifier(
+            smtp_server=Config.NOTIFICATION_SMTP_SERVER,
+            smtp_port=Config.NOTIFICATION_SMTP_PORT,
+            from_email=Config.NOTIFICATION_FROM_EMAIL,
+            from_password=Config.NOTIFICATION_FROM_PASSWORD,
+            to_emails=Config.NOTIFICATION_TO_EMAILS
+        )
+
+        notifier.send_failure_alert(
+            client_id=Config.CLIENT_ID,
+            error_message=error_message,
+            error_details=error_details
+        )
+    except Exception as e:
+        logging.getLogger(__name__).error(f"Failed to send notification email: {e}")
+
+
 def main():
     """Main application loop."""
     logger = setup_logging()
@@ -61,6 +110,7 @@ def main():
             return 1
 
         health.record_check_start()
+        ping_healthchecks("/start")
 
         logger.info("Initializing components...")
 
@@ -232,11 +282,20 @@ def main():
                 logger.info("="*80)
 
                 health.record_check_success(emails_processed=processed_count)
+                ping_healthchecks()  # Success ping
                 return 0
 
     except Exception as e:
-        logger.error(f"Fatal error: {e}", exc_info=True)
-        health.record_check_failure(str(e))
+        error_message = str(e)
+        error_traceback = traceback.format_exc()
+
+        logger.error(f"Fatal error: {error_message}", exc_info=True)
+        health.record_check_failure(error_message)
+
+        # Send notifications
+        ping_healthchecks("/fail")
+        send_failure_notification(error_message, error_traceback)
+
         return 1
 
 

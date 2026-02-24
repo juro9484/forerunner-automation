@@ -94,6 +94,21 @@ class Config:
     COMMENTS_UPLOAD_ATTACHMENTS: bool = os.getenv("COMMENTS_UPLOAD_ATTACHMENTS", "false").lower() == "true"
     FEATURE_CONTRACT_ADDITION_ENABLED: bool = os.getenv("FEATURE_CONTRACT_ADDITION_ENABLED", "true").lower() == "true"
 
+    # Email Notification Configuration
+    NOTIFICATIONS_ENABLED: bool = os.getenv("NOTIFICATIONS_ENABLED", "false").lower() == "true"
+    NOTIFICATION_SMTP_SERVER: str = os.getenv("NOTIFICATION_SMTP_SERVER", "smtp.gmail.com")
+    NOTIFICATION_SMTP_PORT: int = int(os.getenv("NOTIFICATION_SMTP_PORT", "587"))
+    NOTIFICATION_FROM_EMAIL: str = os.getenv("NOTIFICATION_FROM_EMAIL", "")
+    NOTIFICATION_FROM_PASSWORD: str = os.getenv("NOTIFICATION_FROM_PASSWORD", "")
+    NOTIFICATION_TO_EMAILS: list = os.getenv(
+        "NOTIFICATION_TO_EMAILS",
+        "juanrod2000@gmail.com,juan@roaksystems.com,support@roaksystems.com,leif@roaksystems.com"
+    ).split(",")
+
+    # Healthchecks.io Configuration
+    HEALTHCHECKS_ENABLED: bool = os.getenv("HEALTHCHECKS_ENABLED", "false").lower() == "true"
+    HEALTHCHECKS_PING_URL: str = os.getenv("HEALTHCHECKS_PING_URL", "")
+
     @classmethod
     def validate(cls) -> bool:
         """
