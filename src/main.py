@@ -193,7 +193,8 @@ def main():
                             "new contract",
                             "add claim",
                             "create claim",
-                            "add contract"
+                            "add contract",
+                            "new"
                         ]
                         subject_lower = email_data.subject.lower()
                         is_contract = any(keyword in subject_lower for keyword in contract_keywords)
