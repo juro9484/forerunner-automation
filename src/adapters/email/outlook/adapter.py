@@ -318,7 +318,18 @@ class OutlookAdapter:
             claim_number = self._extract_claim_number(subject)
 
             # Check if this is a contract email (new client)
-            is_contract_email = "contract" in subject.lower()
+            # Check for various keywords that indicate a new claim should be created
+            contract_keywords = [
+                "contract",
+                "new claim",
+                "new contract",
+                "add claim",
+                "create claim",
+                "add contract",
+                "new"
+            ]
+            subject_lower = subject.lower()
+            is_contract_email = any(keyword in subject_lower for keyword in contract_keywords)
 
             # Skip if no claim number AND not a contract email
             if not claim_number and not is_contract_email:
