@@ -308,21 +308,28 @@ class CheckDepositFeature:
             # Ensure button is visible
             save_button.wait_for(state='visible', timeout=5000)
 
-            # Scroll the slideover to the bottom to ensure Save button is in view
-            try:
-                self.logger.info(f"  Scrolling slideover to bottom...")
-                # Scroll within the slideover-content to bring footer into view
-                slideover_content = self.adapter.page.locator('.slideover-content').first
-                slideover_content.evaluate("el => el.scrollTop = el.scrollHeight")
-                self.adapter.page.wait_for_timeout(500)
-                self.logger.info(f"  ✓ Scrolled to bottom")
-            except Exception as e:
-                self.logger.warning(f"  Could not scroll slideover: {e}")
+            # Try calling Livewire's save method directly
+            self.logger.info(f"  Attempting to trigger Livewire save...")
 
-            # Click using JavaScript (bypasses ALL Playwright checks)
-            self.logger.info(f"  Clicking Save button via JavaScript...")
-            save_button.evaluate("button => button.click()")
-            self.logger.info(f"  ✓ Button clicked")
+            try:
+                # Find the Livewire component and call save() method directly
+                self.adapter.page.evaluate("""
+                    () => {
+                        // Find the Livewire component on the form
+                        const form = document.querySelector('form[wire\\\\:submit]');
+                        if (form && form.__livewire) {
+                            // Call the save method directly on the Livewire component
+                            form.__livewire.call('save');
+                            console.log('Livewire save() called');
+                            return true;
+                        }
+                        return false;
+                    }
+                """)
+                self.logger.info(f"  ✓ Livewire save() method called")
+            except Exception as e:
+                self.logger.error(f"  Failed to call Livewire save: {e}")
+                raise FormSubmissionError(f"Could not trigger Livewire save: {e}")
 
             # Wait for the form submission to be processed (AJAX-based)
             self.adapter.page.wait_for_timeout(3000)
