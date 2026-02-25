@@ -308,29 +308,21 @@ class CheckDepositFeature:
             # Ensure button is visible
             save_button.wait_for(state='visible', timeout=5000)
 
-            # Scroll the slideover footer (with Save button) into view
+            # Scroll the slideover to the bottom to ensure Save button is in view
             try:
-                self.logger.info(f"  Scrolling Save button into view...")
-                save_button.scroll_into_view_if_needed(timeout=5000)
+                self.logger.info(f"  Scrolling slideover to bottom...")
+                # Scroll within the slideover-content to bring footer into view
+                slideover_content = self.adapter.page.locator('.slideover-content').first
+                slideover_content.evaluate("el => el.scrollTop = el.scrollHeight")
                 self.adapter.page.wait_for_timeout(500)
-                self.logger.info(f"  ✓ Button scrolled into view")
+                self.logger.info(f"  ✓ Scrolled to bottom")
             except Exception as e:
-                self.logger.warning(f"  Could not scroll button: {e}")
+                self.logger.warning(f"  Could not scroll slideover: {e}")
 
-            # Check if any overlay is covering the button
-            try:
-                loading_overlay = self.adapter.page.locator('[wire\\:loading].overlay, .overlay.is-visible').first
-                if loading_overlay.is_visible(timeout=1000):
-                    self.logger.warning(f"  Loading overlay still visible, waiting...")
-                    loading_overlay.wait_for(state='hidden', timeout=10000)
-                    self.logger.info(f"  ✓ Loading overlay cleared")
-            except:
-                pass  # No overlay, good
-
-            # Click with force=True to bypass actionability checks
-            self.logger.info(f"  Clicking Save button...")
-            save_button.click(force=True)
-            self.logger.info(f"  ✓ Click completed")
+            # Click using JavaScript (bypasses ALL Playwright checks)
+            self.logger.info(f"  Clicking Save button via JavaScript...")
+            save_button.evaluate("button => button.click()")
+            self.logger.info(f"  ✓ Button clicked")
 
             # Wait for the form submission to be processed (AJAX-based)
             self.adapter.page.wait_for_timeout(3000)
