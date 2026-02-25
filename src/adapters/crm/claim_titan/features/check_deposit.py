@@ -441,15 +441,18 @@ class CheckDepositFeature:
                     self.adapter.page.screenshot(path=str(screenshot_path))
                     self.logger.error(f"Screenshot saved: {screenshot_path}")
 
-                    # Dump slideover HTML for debugging
+                    # Dump ALL slideouts HTML for debugging
                     html_path = screenshot_dir / f"form_html_{timestamp}.html"
-                    slideover_html = self.adapter.page.evaluate('''() => {
-                        const slideover = document.querySelector('.slideover, [class*="slideover"]');
-                        return slideover ? slideover.outerHTML : document.body.innerHTML;
+                    slideouts_html = self.adapter.page.evaluate('''() => {
+                        const slideouts = document.querySelectorAll('.slideover, [class*="slideover"]');
+                        return Array.from(slideouts).map((s, i) => `
+                            ===== SLIDEOVER ${i} (classes: ${s.className}) =====
+                            ${s.outerHTML}
+                        `).join('\\n\\n');
                     }''')
                     with open(html_path, 'w') as f:
-                        f.write(slideover_html)
-                    self.logger.error(f"HTML dumped: {html_path}")
+                        f.write(slideouts_html)
+                    self.logger.error(f"HTML dumped (${slideouts_html.count('SLIDEOVER')} slideouts): {html_path}")
 
                     # Wait longer and check again
                     self.adapter.page.wait_for_timeout(5000)
