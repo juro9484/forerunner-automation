@@ -194,6 +194,20 @@ class CheckDepositFeature:
         except Exception as e:
             raise NavigationError(f"Failed to open Add Check form: {e}")
 
+    def _fill_livewire_field(self, locator, value, field_name):
+        """
+        Fill a Livewire wire:model field and trigger input event.
+
+        Args:
+            locator: Playwright locator
+            value: Value to fill
+            field_name: Field name for logging
+        """
+        locator.fill(str(value))
+        # Trigger input event so Livewire sees the change
+        locator.evaluate('el => el.dispatchEvent(new Event("input", { bubbles: true }))')
+        self.logger.info(f"    ✓ {field_name}: {value}")
+
     def _fill_check_form(self, check_data: CheckData, check_pdf_path: Path):
         """
         Fill out the carrier check form.
@@ -208,18 +222,15 @@ class CheckDepositFeature:
             # Amount
             amount_input = self.adapter.page.locator('input[wire\\:model="form.amount"]').first
             amount_input.wait_for(state='visible', timeout=10000)
-            amount_input.fill(check_data.check_amount)
-            self.logger.info(f"    ✓ Amount: {check_data.check_amount}")
+            self._fill_livewire_field(amount_input, check_data.check_amount, "Amount")
 
             # Check Number (Reference ID)
             ref_input = self.adapter.page.locator('input[wire\\:model="form.reference_id"]').first
-            ref_input.fill(check_data.check_number)
-            self.logger.info(f"    ✓ Check #: {check_data.check_number}")
+            self._fill_livewire_field(ref_input, check_data.check_number, "Check #")
 
             # Payment Name (use payer)
             name_input = self.adapter.page.locator('input[wire\\:model="form.name"]').first
-            name_input.fill(check_data.payer)
-            self.logger.info(f"    ✓ Payment Name: {check_data.payer}")
+            self._fill_livewire_field(name_input, check_data.payer, "Payment Name")
 
             # Notes (include insured name and confidence info)
             notes_text = f"Insured: {check_data.insured_name}\nAuto-extracted with {check_data.overall_confidence}% confidence"
@@ -227,26 +238,25 @@ class CheckDepositFeature:
                 notes_text += f"\nNotes: {check_data.notes}"
 
             notes_textarea = self.adapter.page.locator('textarea[wire\\:model="form.notes"]').first
-            notes_textarea.fill(notes_text)
-            self.logger.info(f"    ✓ Notes added")
+            self._fill_livewire_field(notes_textarea, notes_text, "Notes")
 
             # Payment Type (default is "check", no need to change)
 
             # Status = Received (value="1")
             status_select = self.adapter.page.locator('select[wire\\:model="form.status"]').first
             status_select.select_option("1")
+            # Select also needs change event for Livewire
+            status_select.evaluate('el => el.dispatchEvent(new Event("change", { bubbles: true }))')
             self.logger.info(f"    ✓ Status: Received")
 
             # Date Issued
             date_input = self.adapter.page.locator('input[wire\\:model="form.issue_date"]').first
-            date_input.fill(check_data.check_date)
-            self.logger.info(f"    ✓ Date Issued: {check_data.check_date}")
+            self._fill_livewire_field(date_input, check_data.check_date, "Date Issued")
 
             # Date Received (use today's date)
             today = datetime.now().strftime('%Y-%m-%d')
             received_input = self.adapter.page.locator('input[wire\\:model="form.date_received"]').first
-            received_input.fill(today)
-            self.logger.info(f"    ✓ Date Received: {today}")
+            self._fill_livewire_field(received_input, today, "Date Received")
 
             # Click Images tab to reveal file upload section
             self.logger.info(f"  Switching to Images tab...")
@@ -314,25 +324,7 @@ class CheckDepositFeature:
             # Ensure button is visible
             save_button.wait_for(state='visible', timeout=5000)
 
-            # DEBUG: Check Livewire state before submission
-            self.logger.info(f"  DEBUG: Checking Livewire component state...")
-            livewire_state = self.adapter.page.evaluate('''() => {
-                const components = window.Livewire?.all() || [];
-                if (components.length > 0) {
-                    const comp = components[0];
-                    return {
-                        id: comp.id,
-                        isDirty: comp.canonical?.effects?.dirty?.length > 0,
-                        isLoading: comp.canonical?.effects?.loading?.length > 0,
-                        hasFiles: comp.canonical?.uploads?.length > 0,
-                        formData: comp.canonical?.data?.form || null
-                    };
-                }
-                return {error: 'No Livewire components found'};
-            }''')
-            self.logger.info(f"  Livewire state: {livewire_state}")
-
-            # Try simple Save button click
+            # Click Save button (Livewire should have all form data now)
             self.logger.info(f"  Clicking Save button...")
             save_button.click()
             self.logger.info(f"  ✓ Clicked Save button")
