@@ -259,15 +259,20 @@ class CheckDepositFeature:
             file_input = self.adapter.page.locator('input[wire\\:model="form.front_file"]').first
             file_input.set_input_files(str(check_pdf_path))
 
-            # Wait longer for file upload to complete (Livewire needs time to process)
-            self.logger.info(f"    Waiting for file upload to complete...")
-            self.adapter.page.wait_for_timeout(5000)
+            # Wait for Livewire upload to complete
+            self.logger.info(f"    Waiting for Livewire file upload to complete...")
+            self.adapter.page.wait_for_timeout(2000)
 
-            # Wait for any loading spinners to disappear
+            # Wait for Livewire loading overlay to disappear
             try:
-                self.adapter.page.wait_for_selector('div.spinner, div.loading', state='hidden', timeout=10000)
+                loading_overlay = self.adapter.page.locator('[wire\\:loading]').first
+                loading_overlay.wait_for(state='hidden', timeout=15000)
+                self.logger.info(f"    ✓ Livewire upload finished")
             except:
-                pass  # No spinner found, that's fine
+                self.logger.info(f"    ✓ No loading overlay found (upload may be instant)")
+
+            # Extra wait to ensure Livewire state is updated
+            self.adapter.page.wait_for_timeout(1000)
 
             self.logger.info(f"    ✓ Check PDF uploaded")
 
@@ -297,24 +302,22 @@ class CheckDepositFeature:
                 if is_disabled:
                     raise FormSubmissionError("Save button is still disabled after waiting")
 
-            # Try submitting via Livewire form submit instead of button click
-            self.logger.info(f"  Attempting form submission via Livewire...")
+            # Click Save button using Playwright's native click (waits for actionability)
+            self.logger.info(f"  Clicking Save button...")
 
             try:
-                # Find the form and trigger submit via JavaScript (works with Livewire)
-                form = self.adapter.page.locator('form[wire\\:submit]').first
-                if form.is_visible(timeout=2000):
-                    self.logger.info(f"  Found Livewire form, submitting...")
-                    # Submit the form via JavaScript - this works better with Livewire
-                    form.evaluate("form => form.requestSubmit()")
-                    self.logger.info(f"  ✓ Form submitted via requestSubmit()")
-                else:
-                    raise Exception("Livewire form not found, falling back to button click")
+                # Try normal Playwright click first (waits for button to be actionable)
+                save_button.click(timeout=10000)
+                self.logger.info(f"  ✓ Save button clicked (normal click)")
             except Exception as e:
-                # Fallback to button click
-                self.logger.warning(f"  Form submit failed ({e}), trying button click...")
-                self.adapter.robust_click(save_button, "Save button", timeout=15000)
-                self.logger.info(f"  ✓ Save button clicked")
+                self.logger.warning(f"  Normal click failed ({e}), trying force click...")
+                try:
+                    save_button.click(force=True, timeout=5000)
+                    self.logger.info(f"  ✓ Save button clicked (force click)")
+                except Exception as e2:
+                    self.logger.error(f"  Force click also failed ({e2}), trying JavaScript...")
+                    save_button.evaluate("button => button.click()")
+                    self.logger.info(f"  ✓ Save button clicked (JavaScript)")
 
             # Wait for submission to complete and slideover to close
             self.logger.info(f"  Waiting for form submission to complete...")
