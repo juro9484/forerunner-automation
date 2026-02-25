@@ -324,9 +324,20 @@ class CheckDepositFeature:
             # Ensure button is visible
             save_button.wait_for(state='visible', timeout=5000)
 
-            # Click Save button (Livewire should have all form data now)
-            self.logger.info(f"  Clicking Save button...")
-            save_button.click()
+            # Click Save button with force to bypass viewport checks
+            # (Livewire now has all form data thanks to input event dispatching)
+            self.logger.info(f"  Clicking Save button (force)...")
+            try:
+                save_button.click(force=True, timeout=5000)
+            except Exception as e:
+                # If force click fails, try JavaScript click as fallback
+                self.logger.warning(f"  Force click failed: {e}, trying JavaScript...")
+                self.adapter.page.evaluate('''() => {
+                    const btn = document.querySelector('button[type="submit"]');
+                    if (btn && btn.textContent.includes('Save')) {
+                        btn.click();
+                    }
+                }''')
             self.logger.info(f"  ✓ Clicked Save button")
 
             self.logger.info(f"  ✓ Pressed Enter on amount field")
