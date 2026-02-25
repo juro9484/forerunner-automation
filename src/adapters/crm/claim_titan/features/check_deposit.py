@@ -297,10 +297,24 @@ class CheckDepositFeature:
                 if is_disabled:
                     raise FormSubmissionError("Save button is still disabled after waiting")
 
-            # Use robust_click for better reliability
-            self.logger.info(f"  Clicking Save button...")
-            self.adapter.robust_click(save_button, "Save button", timeout=15000)
-            self.logger.info(f"  ✓ Save button clicked")
+            # Try submitting via Livewire form submit instead of button click
+            self.logger.info(f"  Attempting form submission via Livewire...")
+
+            try:
+                # Find the form and trigger submit via JavaScript (works with Livewire)
+                form = self.adapter.page.locator('form[wire\\:submit]').first
+                if form.is_visible(timeout=2000):
+                    self.logger.info(f"  Found Livewire form, submitting...")
+                    # Submit the form via JavaScript - this works better with Livewire
+                    form.evaluate("form => form.requestSubmit()")
+                    self.logger.info(f"  ✓ Form submitted via requestSubmit()")
+                else:
+                    raise Exception("Livewire form not found, falling back to button click")
+            except Exception as e:
+                # Fallback to button click
+                self.logger.warning(f"  Form submit failed ({e}), trying button click...")
+                self.adapter.robust_click(save_button, "Save button", timeout=15000)
+                self.logger.info(f"  ✓ Save button clicked")
 
             # Wait for submission to complete and slideover to close
             self.logger.info(f"  Waiting for form submission to complete...")
