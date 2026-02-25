@@ -305,20 +305,21 @@ class CheckDepositFeature:
             # Wait a moment to ensure all Livewire updates are complete
             self.adapter.page.wait_for_timeout(1000)
 
-            # Find Apply button (NOT "Save" - the button actually says "Apply")
-            save_button = self.adapter.page.locator('button[type="submit"]:has-text("Apply")').first
+            # Find Save button in the OPEN slideover
+            # Use more specific selector to target the open slideover's button
+            save_button = self.adapter.page.locator('.slideover.open button[type="submit"]:has-text("Save")').first
 
             # Check if button is enabled (not disabled)
-            self.logger.info(f"  Checking if Apply button is enabled...")
+            self.logger.info(f"  Checking if Save button is enabled...")
             is_disabled = save_button.get_attribute('disabled')
             if is_disabled:
-                self.logger.warning(f"  Apply button is disabled, waiting for it to become enabled...")
+                self.logger.warning(f"  Save button is disabled, waiting for it to become enabled...")
                 self.adapter.page.wait_for_timeout(3000)
                 is_disabled = save_button.get_attribute('disabled')
                 if is_disabled:
-                    raise FormSubmissionError("Apply button is still disabled after waiting")
+                    raise FormSubmissionError("Save button is still disabled after waiting")
 
-            self.logger.info(f"  Apply button is enabled")
+            self.logger.info(f"  Save button is enabled")
 
             # Manually populate Livewire's data object from DOM values
             self.logger.info(f"  Manually syncing DOM values to Livewire state...")
@@ -369,19 +370,22 @@ class CheckDepositFeature:
             }''')
             self.logger.info(f"  Verified Livewire state after sync: {verify}")
 
-            # Now click the Apply button
-            self.logger.info(f"  Clicking Apply button after manual sync...")
+            # Now click the Save button
+            self.logger.info(f"  Clicking Save button after manual sync...")
             try:
                 save_button.click(force=True, timeout=5000)
             except Exception as e:
                 self.logger.warning(f"  Force click failed: {e}, trying JavaScript...")
                 self.adapter.page.evaluate('''() => {
-                    const btn = document.querySelector('button[type="submit"]');
-                    if (btn && btn.textContent.includes('Apply')) {
-                        btn.click();
+                    const slideover = document.querySelector('.slideover.open');
+                    if (slideover) {
+                        const btn = slideover.querySelector('button[type="submit"]');
+                        if (btn && btn.textContent.includes('Save')) {
+                            btn.click();
+                        }
                     }
                 }''')
-            self.logger.info(f"  ✓ Clicked Apply button")
+            self.logger.info(f"  ✓ Clicked Save button")
 
             # Wait for the form submission to be processed (AJAX-based)
             self.adapter.page.wait_for_timeout(3000)
@@ -422,17 +426,21 @@ class CheckDepositFeature:
                     else:
                         self.logger.info("  No validation errors found in DOM")
 
-                        # Debug: Check if Apply button is actually clickable
+                        # Debug: Check if Save button in open slideover is actually clickable
                         btn_debug = self.adapter.page.evaluate('''() => {
-                            const btn = document.querySelector('button[type="submit"]');
-                            return {
-                                exists: !!btn,
-                                disabled: btn?.disabled,
-                                visible: btn?.offsetParent !== null,
-                                text: btn?.textContent
-                            };
+                            const slideover = document.querySelector('.slideover.open');
+                            if (slideover) {
+                                const btn = slideover.querySelector('button[type="submit"]');
+                                return {
+                                    exists: !!btn,
+                                    disabled: btn?.disabled,
+                                    visible: btn?.offsetParent !== null,
+                                    text: btn?.textContent?.trim()
+                                };
+                            }
+                            return {error: 'No open slideover found'};
                         }''')
-                        self.logger.info(f"  Apply button state: {btn_debug}")
+                        self.logger.info(f"  Save button state (in open slideover): {btn_debug}")
 
                     # Take screenshot and dump HTML
                     screenshot_dir = self.config.SCREENSHOTS_DIR
