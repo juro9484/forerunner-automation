@@ -335,14 +335,14 @@ class CheckDepositFeature:
 
                 const comp = components[0];
 
-                // Get values from DOM
-                const amount = document.querySelector('input[wire\\:model="form.amount"]')?.value;
-                const refId = document.querySelector('input[wire\\:model="form.reference_id"]')?.value;
-                const name = document.querySelector('input[wire\\:model="form.name"]')?.value;
-                const notes = document.querySelector('textarea[wire\\:model="form.notes"]')?.value;
-                const status = document.querySelector('select[wire\\:model="form.status"]')?.value;
-                const issueDate = document.querySelector('input[wire\\:model="form.issue_date"]')?.value;
-                const dateReceived = document.querySelector('input[wire\\:model="form.date_received"]')?.value;
+                // Get values from DOM (need to escape colon in attribute selector)
+                const amount = document.querySelector('input[wire\\\\:model="form.amount"]')?.value;
+                const refId = document.querySelector('input[wire\\\\:model="form.reference_id"]')?.value;
+                const name = document.querySelector('input[wire\\\\:model="form.name"]')?.value;
+                const notes = document.querySelector('textarea[wire\\\\:model="form.notes"]')?.value;
+                const status = document.querySelector('select[wire\\\\:model="form.status"]')?.value;
+                const issueDate = document.querySelector('input[wire\\\\:model="form.issue_date"]')?.value;
+                const dateReceived = document.querySelector('input[wire\\\\:model="form.date_received"]')?.value;
 
                 // Manually set Livewire's internal data
                 if (!comp.canonical) comp.canonical = {};
