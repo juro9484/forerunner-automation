@@ -315,12 +315,12 @@ class CheckDepositFeature:
             save_button.wait_for(state='visible', timeout=5000)
 
             # Submit by pressing Enter on the amount field (works in manual testing)
-            self.logger.info(f"  Submitting form by pressing Enter...")
+            self.logger.info(f"  Clicking amount field and pressing Enter...")
 
-            # Focus on the amount input and press Enter
+            # Click on the amount input and press Enter (user confirmed this works manually)
             amount_input = self.adapter.page.locator('input[wire\\:model="form.amount"]').first
-            amount_input.focus()
-            self.adapter.page.wait_for_timeout(300)
+            amount_input.click()
+            self.adapter.page.wait_for_timeout(500)
             amount_input.press('Enter')
 
             self.logger.info(f"  ✓ Pressed Enter on amount field")
