@@ -276,6 +276,12 @@ class CheckDepositFeature:
 
             self.logger.info(f"    ✓ Check PDF uploaded")
 
+            # Switch back to Status tab before submitting (form validation might need this)
+            self.logger.info(f"  Switching back to Status tab before submit...")
+            status_tab = self.adapter.page.locator('button:has-text("Status")').first
+            status_tab.click()
+            self.adapter.page.wait_for_timeout(500)
+
             self.logger.info(f"  ✓ Form filled successfully")
 
         except Exception as e:
