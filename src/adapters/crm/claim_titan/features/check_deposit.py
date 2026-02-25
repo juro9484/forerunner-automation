@@ -326,36 +326,58 @@ class CheckDepositFeature:
             # Ensure button is visible
             save_button.wait_for(state='visible', timeout=5000)
 
-            # Bypass form submit button - call Livewire's save() method directly
-            self.logger.info(f"  Calling Livewire component save() method directly...")
+            # Manually populate Livewire's data object from DOM values
+            self.logger.info(f"  Manually syncing DOM values to Livewire state...")
 
-            result = self.adapter.page.evaluate('''() => {
+            sync_result = self.adapter.page.evaluate('''() => {
                 const components = window.Livewire?.all() || [];
+                if (components.length === 0) return {success: false, error: 'No components'};
 
-                // Find the component that has a save method
-                for (let comp of components) {
-                    if (typeof comp.save === 'function' || typeof comp.call === 'function') {
-                        try {
-                            // Try calling save() if it exists
-                            if (typeof comp.save === 'function') {
-                                comp.save();
-                                return {success: true, method: 'save()', id: comp.id};
-                            }
-                            // Or try call('save') for Livewire 3
-                            if (typeof comp.call === 'function') {
-                                comp.call('save');
-                                return {success: true, method: 'call(save)', id: comp.id};
-                            }
-                        } catch (e) {
-                            return {success: false, error: e.message};
-                        }
-                    }
-                }
+                const comp = components[0];
 
-                return {success: false, error: 'No component with save method found'};
+                // Get values from DOM
+                const amount = document.querySelector('input[wire\\:model="form.amount"]')?.value;
+                const refId = document.querySelector('input[wire\\:model="form.reference_id"]')?.value;
+                const name = document.querySelector('input[wire\\:model="form.name"]')?.value;
+                const notes = document.querySelector('textarea[wire\\:model="form.notes"]')?.value;
+                const status = document.querySelector('select[wire\\:model="form.status"]')?.value;
+                const issueDate = document.querySelector('input[wire\\:model="form.issue_date"]')?.value;
+                const dateReceived = document.querySelector('input[wire\\:model="form.date_received"]')?.value;
+
+                // Manually set Livewire's internal data
+                if (!comp.canonical) comp.canonical = {};
+                if (!comp.canonical.data) comp.canonical.data = {};
+                comp.canonical.data.form = {
+                    amount: amount,
+                    reference_id: refId,
+                    name: name,
+                    notes: notes,
+                    status: status,
+                    issue_date: issueDate,
+                    date_received: dateReceived
+                };
+
+                return {
+                    success: true,
+                    values: {amount, refId, name, status}
+                };
             }''')
 
-            self.logger.info(f"  Livewire save result: {result}")
+            self.logger.info(f"  Sync result: {sync_result}")
+
+            # Now click the Save button
+            self.logger.info(f"  Clicking Save button after manual sync...")
+            try:
+                save_button.click(force=True, timeout=5000)
+            except Exception as e:
+                self.logger.warning(f"  Force click failed: {e}, trying JavaScript...")
+                self.adapter.page.evaluate('''() => {
+                    const btn = document.querySelector('button[type="submit"]');
+                    if (btn && btn.textContent.includes('Save')) {
+                        btn.click();
+                    }
+                }''')
+            self.logger.info(f"  ✓ Clicked Save button")
 
             self.logger.info(f"  ✓ Pressed Enter on amount field")
 
