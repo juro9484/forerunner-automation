@@ -165,7 +165,7 @@ class CheckDepositFeature:
             raise NavigationError(f"Failed to navigate to Carrier Checks page: {e}")
 
     def _click_add_check_button(self):
-        """Click the 'Add Check' button to open the form modal."""
+        """Click the 'Add Check' button to open the form slideover."""
         try:
             self.logger.info(f"  Clicking 'Add Check' button...")
 
@@ -174,14 +174,14 @@ class CheckDepositFeature:
             add_button.wait_for(state='visible', timeout=10000)
             add_button.click()
 
-            # Wait for modal/slideover to open
+            # Wait for slideover to open
             self.adapter.page.wait_for_timeout(2000)
 
-            # Verify form is visible
-            form = self.adapter.page.locator('form').first
-            form.wait_for(state='visible', timeout=10000)
+            # Verify slideover and Save button are visible
+            save_button = self.adapter.page.locator('button[type="submit"]:has-text("Save")').first
+            save_button.wait_for(state='visible', timeout=10000)
 
-            self.logger.info(f"  ✓ Add Check form opened")
+            self.logger.info(f"  ✓ Add Check slideover opened")
 
         except Exception as e:
             raise NavigationError(f"Failed to open Add Check form: {e}")
@@ -268,18 +268,17 @@ class CheckDepositFeature:
             save_button.wait_for(state='visible', timeout=10000)
             save_button.click()
 
-            # Wait for submission to complete
+            # Wait for submission to complete and slideover to close
             self.adapter.page.wait_for_timeout(3000)
 
-            # Verify success (form should close or redirect)
-            # If form is still visible, submission may have failed
+            # Verify success - check if slideover closed
             try:
-                form = self.adapter.page.locator('form').first
-                if form.is_visible(timeout=2000):
-                    self.logger.warning("Form still visible after submit - may have failed")
+                slideover_footer = self.adapter.page.locator('div.slideover-footer').first
+                if slideover_footer.is_visible(timeout=2000):
+                    self.logger.warning("Slideover still visible after submit - may have failed or still processing")
             except:
-                # Form not visible = success
-                pass
+                # Slideover not visible = success
+                self.logger.info(f"  ✓ Slideover closed - submission successful")
 
             self.logger.info(f"  ✓ Form submitted")
 
