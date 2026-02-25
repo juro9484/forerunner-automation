@@ -302,22 +302,41 @@ class CheckDepositFeature:
                 if is_disabled:
                     raise FormSubmissionError("Save button is still disabled after waiting")
 
-            # Click Save button using Playwright's native click (waits for actionability)
-            self.logger.info(f"  Clicking Save button...")
+            # Click Save button (same pattern as working comments feature)
+            self.logger.info(f"  Submitting form...")
 
+            # Debug: Check if button is disabled
+            is_disabled = save_button.get_attribute('disabled')
+            self.logger.info(f"  Button disabled: {is_disabled}")
+
+            # Debug: Get all form values before submit
             try:
-                # Try normal Playwright click first (waits for button to be actionable)
-                save_button.click(timeout=10000)
-                self.logger.info(f"  ✓ Save button clicked (normal click)")
-            except Exception as e:
-                self.logger.warning(f"  Normal click failed ({e}), trying force click...")
-                try:
-                    save_button.click(force=True, timeout=5000)
-                    self.logger.info(f"  ✓ Save button clicked (force click)")
-                except Exception as e2:
-                    self.logger.error(f"  Force click also failed ({e2}), trying JavaScript...")
-                    save_button.evaluate("button => button.click()")
-                    self.logger.info(f"  ✓ Save button clicked (JavaScript)")
+                amount_val = self.adapter.page.locator('input[wire\\:model="form.amount"]').first.input_value()
+                self.logger.info(f"  Form amount value: '{amount_val}'")
+            except:
+                pass
+
+            # Ensure button is visible and clickable
+            save_button.wait_for(state='visible', timeout=5000)
+
+            # Click the button
+            self.logger.info(f"  Attempting click...")
+            save_button.click()
+            self.logger.info(f"  Click completed")
+
+            # Wait for the form submission to be processed (AJAX-based)
+            self.adapter.page.wait_for_timeout(3000)
+
+            # Debug: Check if any Livewire errors appeared
+            try:
+                livewire_error = self.adapter.page.locator('[x-show="hasError"]').first
+                if livewire_error.is_visible(timeout=1000):
+                    error_text = livewire_error.inner_text()
+                    self.logger.error(f"  Livewire error visible: {error_text}")
+            except:
+                pass
+
+            self.logger.info(f"  ✓ Form click completed")
 
             # Wait for submission to complete and slideover to close
             self.logger.info(f"  Waiting for form submission to complete...")
