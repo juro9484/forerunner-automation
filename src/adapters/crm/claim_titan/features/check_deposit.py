@@ -314,14 +314,28 @@ class CheckDepositFeature:
             # Ensure button is visible
             save_button.wait_for(state='visible', timeout=5000)
 
-            # Submit by pressing Enter on the amount field (works in manual testing)
-            self.logger.info(f"  Clicking amount field and pressing Enter...")
+            # DEBUG: Check Livewire state before submission
+            self.logger.info(f"  DEBUG: Checking Livewire component state...")
+            livewire_state = self.adapter.page.evaluate('''() => {
+                const components = window.Livewire?.all() || [];
+                if (components.length > 0) {
+                    const comp = components[0];
+                    return {
+                        id: comp.id,
+                        isDirty: comp.canonical?.effects?.dirty?.length > 0,
+                        isLoading: comp.canonical?.effects?.loading?.length > 0,
+                        hasFiles: comp.canonical?.uploads?.length > 0,
+                        formData: comp.canonical?.data?.form || null
+                    };
+                }
+                return {error: 'No Livewire components found'};
+            }''')
+            self.logger.info(f"  Livewire state: {livewire_state}")
 
-            # Click on the amount input and press Enter (user confirmed this works manually)
-            amount_input = self.adapter.page.locator('input[wire\\:model="form.amount"]').first
-            amount_input.click()
-            self.adapter.page.wait_for_timeout(500)
-            amount_input.press('Enter')
+            # Try simple Save button click
+            self.logger.info(f"  Clicking Save button...")
+            save_button.click()
+            self.logger.info(f"  ✓ Clicked Save button")
 
             self.logger.info(f"  ✓ Pressed Enter on amount field")
 
