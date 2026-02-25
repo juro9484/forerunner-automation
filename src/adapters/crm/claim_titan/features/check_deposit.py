@@ -194,18 +194,28 @@ class CheckDepositFeature:
         except Exception as e:
             raise NavigationError(f"Failed to open Add Check form: {e}")
 
-    def _fill_livewire_field(self, locator, value, field_name):
+    def _fill_livewire_field(self, locator, value, field_name, wire_model):
         """
-        Fill a Livewire wire:model field and trigger input event.
+        Fill a Livewire wire:model field using Livewire's set() API.
 
         Args:
             locator: Playwright locator
             value: Value to fill
             field_name: Field name for logging
+            wire_model: The wire:model attribute value (e.g., "form.amount")
         """
+        # Fill the visual field first
         locator.fill(str(value))
-        # Trigger input event so Livewire sees the change
-        locator.evaluate('el => el.dispatchEvent(new Event("input", { bubbles: true }))')
+
+        # Also set via Livewire API to ensure state is updated
+        import json
+        self.adapter.page.evaluate(f'''(value) => {{
+            const components = window.Livewire?.all() || [];
+            if (components.length > 0) {{
+                components[0].set('{wire_model}', value);
+            }}
+        }}''', value)
+
         self.logger.info(f"    ✓ {field_name}: {value}")
 
     def _fill_check_form(self, check_data: CheckData, check_pdf_path: Path):
@@ -222,15 +232,15 @@ class CheckDepositFeature:
             # Amount
             amount_input = self.adapter.page.locator('input[wire\\:model="form.amount"]').first
             amount_input.wait_for(state='visible', timeout=10000)
-            self._fill_livewire_field(amount_input, check_data.check_amount, "Amount")
+            self._fill_livewire_field(amount_input, check_data.check_amount, "Amount", "form.amount")
 
             # Check Number (Reference ID)
             ref_input = self.adapter.page.locator('input[wire\\:model="form.reference_id"]').first
-            self._fill_livewire_field(ref_input, check_data.check_number, "Check #")
+            self._fill_livewire_field(ref_input, check_data.check_number, "Check #", "form.reference_id")
 
             # Payment Name (use payer)
             name_input = self.adapter.page.locator('input[wire\\:model="form.name"]').first
-            self._fill_livewire_field(name_input, check_data.payer, "Payment Name")
+            self._fill_livewire_field(name_input, check_data.payer, "Payment Name", "form.name")
 
             # Notes (include insured name and confidence info)
             notes_text = f"Insured: {check_data.insured_name}\nAuto-extracted with {check_data.overall_confidence}% confidence"
@@ -238,25 +248,30 @@ class CheckDepositFeature:
                 notes_text += f"\nNotes: {check_data.notes}"
 
             notes_textarea = self.adapter.page.locator('textarea[wire\\:model="form.notes"]').first
-            self._fill_livewire_field(notes_textarea, notes_text, "Notes")
+            self._fill_livewire_field(notes_textarea, notes_text, "Notes", "form.notes")
 
             # Payment Type (default is "check", no need to change)
 
             # Status = Received (value="1")
             status_select = self.adapter.page.locator('select[wire\\:model="form.status"]').first
             status_select.select_option("1")
-            # Select also needs change event for Livewire
-            status_select.evaluate('el => el.dispatchEvent(new Event("change", { bubbles: true }))')
+            # Also set via Livewire API
+            self.adapter.page.evaluate('''() => {
+                const components = window.Livewire?.all() || [];
+                if (components.length > 0) {
+                    components[0].set('form.status', '1');
+                }
+            }''')
             self.logger.info(f"    ✓ Status: Received")
 
             # Date Issued
             date_input = self.adapter.page.locator('input[wire\\:model="form.issue_date"]').first
-            self._fill_livewire_field(date_input, check_data.check_date, "Date Issued")
+            self._fill_livewire_field(date_input, check_data.check_date, "Date Issued", "form.issue_date")
 
             # Date Received (use today's date)
             today = datetime.now().strftime('%Y-%m-%d')
             received_input = self.adapter.page.locator('input[wire\\:model="form.date_received"]').first
-            self._fill_livewire_field(received_input, today, "Date Received")
+            self._fill_livewire_field(received_input, today, "Date Received", "form.date_received")
 
             # Click Images tab to reveal file upload section
             self.logger.info(f"  Switching to Images tab...")
