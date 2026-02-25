@@ -289,7 +289,9 @@ def main():
 
                                         # Clean up: Delete check PDF after successful upload
                                         try:
-                                            pdf_attachment.file_path.unlink()
+                                            from pathlib import Path
+                                            pdf_path = Path(pdf_attachment.file_path) if isinstance(pdf_attachment.file_path, str) else pdf_attachment.file_path
+                                            pdf_path.unlink()
                                             logger.info(f"  ✓ Deleted check PDF: {pdf_attachment.filename}")
                                         except Exception as e:
                                             logger.warning(f"  ! Failed to delete check PDF: {e}")
@@ -391,7 +393,9 @@ def main():
 
                                 # Clean up: Delete contract PDF after successful claim creation
                                 try:
-                                    pdf_attachment.file_path.unlink()
+                                    from pathlib import Path
+                                    pdf_path = Path(pdf_attachment.file_path) if isinstance(pdf_attachment.file_path, str) else pdf_attachment.file_path
+                                    pdf_path.unlink()
                                     logger.info(f"✓ Deleted contract PDF: {pdf_attachment.filename}")
                                 except Exception as e:
                                     logger.warning(f"! Failed to delete contract PDF: {e}")

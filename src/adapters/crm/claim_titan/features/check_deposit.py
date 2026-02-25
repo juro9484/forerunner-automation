@@ -45,7 +45,7 @@ class CheckDepositFeature:
         self.config = adapter.config
         self.logger = logging.getLogger(__name__)
 
-    def process(self, check_data: CheckData, check_pdf_path: Path) -> ClaimTitanResult:
+    def process(self, check_data: CheckData, check_pdf_path) -> ClaimTitanResult:
         """
         Add a carrier check to ClaimTitan.
 
@@ -311,24 +311,43 @@ class CheckDepositFeature:
             try:
                 slideover_footer = self.adapter.page.locator('div.slideover-footer').first
                 if slideover_footer.is_visible(timeout=2000):
-                    self.logger.warning("Slideover still visible after 5s, waiting longer...")
-                    # Wait a bit longer and check again
+                    self.logger.warning("Slideover still visible after 5s - checking for validation errors...")
+
+                    # Check for validation error messages
+                    error_messages = self.adapter.page.locator('.text-danger, .text-red-500, .error, [role="alert"]')
+                    error_count = error_messages.count()
+                    if error_count > 0:
+                        self.logger.error(f"Found {error_count} validation error(s):")
+                        for i in range(min(error_count, 5)):  # Log first 5 errors
+                            try:
+                                error_text = error_messages.nth(i).inner_text(timeout=1000)
+                                self.logger.error(f"  Error {i+1}: {error_text}")
+                            except:
+                                pass
+
+                    # Take screenshot
+                    screenshot_dir = self.config.SCREENSHOTS_DIR
+                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    screenshot_path = screenshot_dir / f"form_not_submitting_{timestamp}.png"
+                    self.adapter.page.screenshot(path=str(screenshot_path))
+                    self.logger.error(f"Screenshot saved: {screenshot_path}")
+
+                    # Wait longer and check again
                     self.adapter.page.wait_for_timeout(5000)
                     if slideover_footer.is_visible(timeout=2000):
-                        self.logger.error("Slideover still visible after 10s - submission may have failed")
+                        raise FormSubmissionError("Slideover did not close after 10s - form submission failed (check screenshot for validation errors)")
                     else:
                         slideover_closed = True
                         self.logger.info(f"  ✓ Slideover closed after extended wait")
                 else:
                     slideover_closed = True
                     self.logger.info(f"  ✓ Slideover closed - submission successful")
+            except FormSubmissionError:
+                raise
             except:
                 # Slideover not visible = success
                 slideover_closed = True
                 self.logger.info(f"  ✓ Slideover closed - submission successful")
-
-            if not slideover_closed:
-                self.logger.warning("  ! Slideover did not close - check may not have been saved")
 
             self.logger.info(f"  ✓ Form submitted")
 
