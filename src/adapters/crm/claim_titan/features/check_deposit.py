@@ -314,28 +314,53 @@ class CheckDepositFeature:
             # Ensure button is visible
             save_button.wait_for(state='visible', timeout=5000)
 
+            # Set up console error monitoring
+            console_errors = []
+            def handle_console(msg):
+                if msg.type in ['error', 'warning']:
+                    console_errors.append(f"{msg.type.upper()}: {msg.text}")
+
+            self.adapter.page.on("console", handle_console)
+
             # Try calling Livewire's save method directly
             self.logger.info(f"  Attempting to trigger Livewire save...")
 
-            try:
-                # Find the Livewire component and call save() method directly
-                self.adapter.page.evaluate("""
-                    () => {
-                        // Find the Livewire component on the form
-                        const form = document.querySelector('form[wire\\\\:submit]');
-                        if (form && form.__livewire) {
-                            // Call the save method directly on the Livewire component
-                            form.__livewire.call('save');
-                            console.log('Livewire save() called');
-                            return true;
-                        }
-                        return false;
+            result = self.adapter.page.evaluate("""
+                () => {
+                    // Find the Livewire component on the form
+                    const form = document.querySelector('form[wire\\\\:submit="save"]');
+                    if (!form) {
+                        return { success: false, error: 'Form not found' };
                     }
-                """)
-                self.logger.info(f"  ✓ Livewire save() method called")
-            except Exception as e:
-                self.logger.error(f"  Failed to call Livewire save: {e}")
-                raise FormSubmissionError(f"Could not trigger Livewire save: {e}")
+                    if (!form.__livewire) {
+                        return { success: false, error: 'Livewire component not found on form' };
+                    }
+
+                    try {
+                        // Call the save method directly on the Livewire component
+                        form.__livewire.call('save');
+                        console.log('Livewire save() called successfully');
+                        return { success: true };
+                    } catch (error) {
+                        return { success: false, error: error.message };
+                    }
+                }
+            """)
+
+            self.adapter.page.remove_listener("console", handle_console)
+
+            if not result.get('success'):
+                error_msg = result.get('error', 'Unknown error')
+                self.logger.error(f"  Failed to call Livewire save: {error_msg}")
+                raise FormSubmissionError(f"Livewire save failed: {error_msg}")
+
+            self.logger.info(f"  ✓ Livewire save() method called")
+
+            # Log any console errors that occurred
+            if console_errors:
+                self.logger.error(f"  Console errors during save:")
+                for err in console_errors:
+                    self.logger.error(f"    {err}")
 
             # Wait for the form submission to be processed (AJAX-based)
             self.adapter.page.wait_for_timeout(3000)
