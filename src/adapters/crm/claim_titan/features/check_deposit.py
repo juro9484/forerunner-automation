@@ -324,6 +324,23 @@ class CheckDepositFeature:
             # Ensure button is visible
             save_button.wait_for(state='visible', timeout=5000)
 
+            # DEBUG: Check if Livewire has the form data now
+            self.logger.info(f"  DEBUG: Checking Livewire state before submit...")
+            livewire_state = self.adapter.page.evaluate('''() => {
+                const components = window.Livewire?.all() || [];
+                if (components.length > 0) {
+                    const comp = components[0];
+                    return {
+                        hasFormData: comp.canonical?.data?.form !== null && comp.canonical?.data?.form !== undefined,
+                        formAmount: comp.canonical?.data?.form?.amount || null,
+                        formStatus: comp.canonical?.data?.form?.status || null,
+                        isLoading: comp.canonical?.effects?.loading?.length > 0
+                    };
+                }
+                return {error: 'No Livewire components found'};
+            }''')
+            self.logger.info(f"  Livewire state: {livewire_state}")
+
             # Click Save button with force to bypass viewport checks
             # (Livewire now has all form data thanks to input event dispatching)
             self.logger.info(f"  Clicking Save button (force)...")
