@@ -365,6 +365,16 @@ class CheckDepositFeature:
 
             self.logger.info(f"  Sync result: {sync_result}")
 
+            # Verify Livewire actually has the data now
+            verify = self.adapter.page.evaluate('''() => {
+                const comp = window.Livewire?.all()[0];
+                return {
+                    hasForm: comp?.canonical?.data?.form !== null,
+                    amount: comp?.canonical?.data?.form?.amount
+                };
+            }''')
+            self.logger.info(f"  Verified Livewire state after sync: {verify}")
+
             # Now click the Save button
             self.logger.info(f"  Clicking Save button after manual sync...")
             try:
@@ -378,8 +388,6 @@ class CheckDepositFeature:
                     }
                 }''')
             self.logger.info(f"  ✓ Clicked Save button")
-
-            self.logger.info(f"  ✓ Pressed Enter on amount field")
 
             # Wait for the form submission to be processed (AJAX-based)
             self.adapter.page.wait_for_timeout(3000)
@@ -417,6 +425,20 @@ class CheckDepositFeature:
                                 self.logger.error(f"  Error {i+1}: {error_text}")
                             except:
                                 pass
+                    else:
+                        self.logger.info("  No validation errors found in DOM")
+
+                        # Debug: Check if Save button is actually clickable
+                        btn_debug = self.adapter.page.evaluate('''() => {
+                            const btn = document.querySelector('button[type="submit"]');
+                            return {
+                                exists: !!btn,
+                                disabled: btn?.disabled,
+                                visible: btn?.offsetParent !== null,
+                                text: btn?.textContent
+                            };
+                        }''')
+                        self.logger.info(f"  Save button state: {btn_debug}")
 
                     # Take screenshot
                     screenshot_dir = self.config.SCREENSHOTS_DIR
