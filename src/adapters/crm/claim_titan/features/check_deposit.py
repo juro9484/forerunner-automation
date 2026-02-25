@@ -434,12 +434,22 @@ class CheckDepositFeature:
                         }''')
                         self.logger.info(f"  Apply button state: {btn_debug}")
 
-                    # Take screenshot
+                    # Take screenshot and dump HTML
                     screenshot_dir = self.config.SCREENSHOTS_DIR
                     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                     screenshot_path = screenshot_dir / f"form_not_submitting_{timestamp}.png"
                     self.adapter.page.screenshot(path=str(screenshot_path))
                     self.logger.error(f"Screenshot saved: {screenshot_path}")
+
+                    # Dump slideover HTML for debugging
+                    html_path = screenshot_dir / f"form_html_{timestamp}.html"
+                    slideover_html = self.adapter.page.evaluate('''() => {
+                        const slideover = document.querySelector('.slideover, [class*="slideover"]');
+                        return slideover ? slideover.outerHTML : document.body.innerHTML;
+                    }''')
+                    with open(html_path, 'w') as f:
+                        f.write(slideover_html)
+                    self.logger.error(f"HTML dumped: {html_path}")
 
                     # Wait longer and check again
                     self.adapter.page.wait_for_timeout(5000)
