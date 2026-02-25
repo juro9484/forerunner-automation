@@ -250,7 +250,17 @@ class CheckDepositFeature:
             self.logger.info(f"  Uploading check PDF...")
             file_input = self.adapter.page.locator('input[wire\\:model="form.front_file"]').first
             file_input.set_input_files(str(check_pdf_path))
-            self.adapter.page.wait_for_timeout(2000)  # Wait for upload
+
+            # Wait longer for file upload to complete (Livewire needs time to process)
+            self.logger.info(f"    Waiting for file upload to complete...")
+            self.adapter.page.wait_for_timeout(5000)
+
+            # Wait for any loading spinners to disappear
+            try:
+                self.adapter.page.wait_for_selector('div.spinner, div.loading', state='hidden', timeout=10000)
+            except:
+                pass  # No spinner found, that's fine
+
             self.logger.info(f"    ✓ Check PDF uploaded")
 
             self.logger.info(f"  ✓ Form filled successfully")
@@ -263,19 +273,33 @@ class CheckDepositFeature:
         try:
             self.logger.info(f"  Submitting form...")
 
-            # Find and click Save button
+            # Wait a moment to ensure all Livewire updates are complete
+            self.adapter.page.wait_for_timeout(1000)
+
+            # Find Save button
             save_button = self.adapter.page.locator('button[type="submit"]:has-text("Save")').first
-            save_button.wait_for(state='visible', timeout=10000)
-            save_button.click()
+
+            # Check if button is enabled (not disabled)
+            self.logger.info(f"  Checking if Save button is enabled...")
+            is_disabled = save_button.get_attribute('disabled')
+            if is_disabled:
+                self.logger.warning(f"  Save button is disabled, waiting for it to become enabled...")
+                self.adapter.page.wait_for_timeout(3000)
+
+            # Use robust_click for better reliability
+            self.adapter.robust_click(save_button, "Save button", timeout=15000)
 
             # Wait for submission to complete and slideover to close
-            self.adapter.page.wait_for_timeout(3000)
+            self.logger.info(f"  Waiting for form submission to complete...")
+            self.adapter.page.wait_for_timeout(5000)
 
             # Verify success - check if slideover closed
             try:
                 slideover_footer = self.adapter.page.locator('div.slideover-footer').first
                 if slideover_footer.is_visible(timeout=2000):
                     self.logger.warning("Slideover still visible after submit - may have failed or still processing")
+                    # Wait a bit longer
+                    self.adapter.page.wait_for_timeout(3000)
             except:
                 # Slideover not visible = success
                 self.logger.info(f"  ✓ Slideover closed - submission successful")
