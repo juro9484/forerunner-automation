@@ -126,6 +126,14 @@ class CheckDepositFeature:
             NavigationError: If navigation fails
         """
         try:
+            # Navigate to claims list page first (in case we're on a different claim)
+            current_url = self.adapter.page.url
+            if '/claims/' in current_url and current_url != 'https://claimtitan.com/claims':
+                self.logger.info(f"  Currently on specific claim page, navigating to claims list...")
+                self.adapter.page.goto('https://claimtitan.com/claims')
+                self.adapter.page.wait_for_load_state('load', timeout=30000)
+                self.adapter.page.wait_for_timeout(2000)
+
             # Search for claim with robust retry logic
             found_variation = self.adapter.search_claim(claim_number)
             self.logger.info(f"  Found claim with variation: {found_variation}")
