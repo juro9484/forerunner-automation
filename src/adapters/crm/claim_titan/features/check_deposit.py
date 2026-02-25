@@ -314,67 +314,16 @@ class CheckDepositFeature:
             # Ensure button is visible
             save_button.wait_for(state='visible', timeout=5000)
 
-            # Set up console error monitoring
-            console_errors = []
-            def handle_console(msg):
-                if msg.type in ['error', 'warning']:
-                    console_errors.append(f"{msg.type.upper()}: {msg.text}")
+            # Submit by pressing Enter on the amount field (works in manual testing)
+            self.logger.info(f"  Submitting form by pressing Enter...")
 
-            self.adapter.page.on("console", handle_console)
+            # Focus on the amount input and press Enter
+            amount_input = self.adapter.page.locator('input[wire\\:model="form.amount"]').first
+            amount_input.focus()
+            self.adapter.page.wait_for_timeout(300)
+            amount_input.press('Enter')
 
-            # Try calling Livewire's save method directly
-            self.logger.info(f"  Attempting to trigger Livewire save...")
-
-            result = self.adapter.page.evaluate("""
-                () => {
-                    // Try multiple methods to trigger Livewire save
-
-                    // Method 1: Find the form and get its Livewire component ID
-                    const form = document.querySelector('form[wire\\\\:submit="save"]');
-                    if (!form) {
-                        return { success: false, error: 'Form not found' };
-                    }
-
-                    // Method 2: Try using Livewire.find() with the component ID
-                    const wireId = form.getAttribute('wire:id');
-                    if (wireId && window.Livewire) {
-                        try {
-                            const component = window.Livewire.find(wireId);
-                            if (component) {
-                                component.call('save');
-                                console.log('Livewire save() via Livewire.find() succeeded');
-                                return { success: true };
-                            }
-                        } catch (error) {
-                            return { success: false, error: 'Livewire.find() failed: ' + error.message };
-                        }
-                    }
-
-                    // Method 3: Just submit the form traditionally
-                    try {
-                        form.submit();
-                        console.log('Form submitted via form.submit()');
-                        return { success: true };
-                    } catch (error) {
-                        return { success: false, error: 'Form submit failed: ' + error.message };
-                    }
-                }
-            """)
-
-            self.adapter.page.remove_listener("console", handle_console)
-
-            if not result.get('success'):
-                error_msg = result.get('error', 'Unknown error')
-                self.logger.error(f"  Failed to call Livewire save: {error_msg}")
-                raise FormSubmissionError(f"Livewire save failed: {error_msg}")
-
-            self.logger.info(f"  ✓ Livewire save() method called")
-
-            # Log any console errors that occurred
-            if console_errors:
-                self.logger.error(f"  Console errors during save:")
-                for err in console_errors:
-                    self.logger.error(f"    {err}")
+            self.logger.info(f"  ✓ Pressed Enter on amount field")
 
             # Wait for the form submission to be processed (AJAX-based)
             self.adapter.page.wait_for_timeout(3000)
