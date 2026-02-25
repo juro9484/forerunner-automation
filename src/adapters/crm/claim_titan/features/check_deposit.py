@@ -58,7 +58,7 @@ class CheckDepositFeature:
         """
         try:
             self.logger.info(f"Adding carrier check to claim {check_data.claim_number}")
-            self.logger.info(f"  Amount: ${check_data.check_amount}")
+            self.logger.info(f"  Amount: {check_data.check_amount}")
             self.logger.info(f"  Check #: {check_data.check_number}")
             self.logger.info(f"  Confidence: {check_data.overall_confidence}%")
 
@@ -209,7 +209,7 @@ class CheckDepositFeature:
             amount_input = self.adapter.page.locator('input[wire\\:model="form.amount"]').first
             amount_input.wait_for(state='visible', timeout=10000)
             amount_input.fill(check_data.check_amount)
-            self.logger.info(f"    ✓ Amount: ${check_data.check_amount}")
+            self.logger.info(f"    ✓ Amount: {check_data.check_amount}")
 
             # Check Number (Reference ID)
             ref_input = self.adapter.page.locator('input[wire\\:model="form.reference_id"]').first
@@ -293,24 +293,42 @@ class CheckDepositFeature:
             if is_disabled:
                 self.logger.warning(f"  Save button is disabled, waiting for it to become enabled...")
                 self.adapter.page.wait_for_timeout(3000)
+                is_disabled = save_button.get_attribute('disabled')
+                if is_disabled:
+                    raise FormSubmissionError("Save button is still disabled after waiting")
 
             # Use robust_click for better reliability
+            self.logger.info(f"  Clicking Save button...")
             self.adapter.robust_click(save_button, "Save button", timeout=15000)
+            self.logger.info(f"  ✓ Save button clicked")
 
             # Wait for submission to complete and slideover to close
             self.logger.info(f"  Waiting for form submission to complete...")
             self.adapter.page.wait_for_timeout(5000)
 
             # Verify success - check if slideover closed
+            slideover_closed = False
             try:
                 slideover_footer = self.adapter.page.locator('div.slideover-footer').first
                 if slideover_footer.is_visible(timeout=2000):
-                    self.logger.warning("Slideover still visible after submit - may have failed or still processing")
-                    # Wait a bit longer
-                    self.adapter.page.wait_for_timeout(3000)
+                    self.logger.warning("Slideover still visible after 5s, waiting longer...")
+                    # Wait a bit longer and check again
+                    self.adapter.page.wait_for_timeout(5000)
+                    if slideover_footer.is_visible(timeout=2000):
+                        self.logger.error("Slideover still visible after 10s - submission may have failed")
+                    else:
+                        slideover_closed = True
+                        self.logger.info(f"  ✓ Slideover closed after extended wait")
+                else:
+                    slideover_closed = True
+                    self.logger.info(f"  ✓ Slideover closed - submission successful")
             except:
                 # Slideover not visible = success
+                slideover_closed = True
                 self.logger.info(f"  ✓ Slideover closed - submission successful")
+
+            if not slideover_closed:
+                self.logger.warning("  ! Slideover did not close - check may not have been saved")
 
             self.logger.info(f"  ✓ Form submitted")
 

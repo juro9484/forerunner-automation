@@ -296,7 +296,11 @@ Return ONLY valid JSON with this structure:
 
         def get_value(key):
             """Get value, preferring second pass."""
-            return second_pass.get(key) or first_pass.get(key) or ""
+            value = second_pass.get(key) or first_pass.get(key) or ""
+            # Clean up check_amount - remove $ and commas
+            if key == 'check_amount' and value:
+                value = value.replace('$', '').replace(',', '').strip()
+            return value
 
         def get_confidence(key):
             """Get confidence, averaging both passes if both exist."""
