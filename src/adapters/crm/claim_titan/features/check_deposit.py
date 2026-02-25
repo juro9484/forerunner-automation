@@ -1,6 +1,30 @@
 """
 Check Deposit Feature for ClaimTitan.
 Navigates to claim, adds carrier check with extracted data.
+
+IMPORTANT IMPLEMENTATION NOTES:
+================================
+
+This feature fills a Livewire 3 form in ClaimTitan via headless Playwright automation.
+Due to headless browser limitations, normal form filling (click + type) does NOT trigger
+Livewire's wire:model data binding. As a workaround, we manually sync DOM values to
+Livewire's internal state before submission.
+
+KEY CHALLENGES SOLVED:
+- 61 slideouts on page: Must target `.slideover.open` specifically
+- Livewire state sync: Manual JavaScript sync of canonical.data.form
+- Button visibility: Save button not in viewport, requires JS click
+- Verification: Check if `.slideover.open` class removed (not footer visibility)
+
+KNOWN WORKAROUNDS:
+- Manual Livewire sync (see _submit_form for detailed documentation)
+- JavaScript click fallback when force click fails
+- Type() instead of fill() to better simulate user input (still doesn't sync Livewire)
+
+FUTURE IMPROVEMENTS:
+- Find proper event sequence to trigger Livewire sync naturally
+- Investigate why headless Playwright doesn't trigger wire:model
+- Consider Livewire 3 API methods if available
 """
 
 import logging
@@ -198,6 +222,14 @@ class CheckDepositFeature:
         """
         Fill a Livewire wire:model field and dispatch proper events.
 
+        KNOWN ISSUE: In headless Playwright, Livewire's wire:model bindings do not
+        sync properly even with click() + type() that simulates real typing.
+        The fields LOOK filled but Livewire's canonical.data.form remains null.
+
+        This is worked around by manually syncing DOM → Livewire state after filling
+        (see _submit_form). A proper fix would involve finding the correct event
+        sequence that makes Livewire sync in headless mode.
+
         Args:
             locator: Playwright locator
             value: Value to fill
@@ -321,9 +353,41 @@ class CheckDepositFeature:
 
             self.logger.info(f"  Save button is enabled")
 
-            # HACK: Manually populate Livewire's data object from DOM values
-            # This is needed because wire:model bindings don't sync in headless Playwright
-            # TODO: Find proper event sequence to trigger Livewire sync naturally
+            # ============================================================================
+            # HACK WARNING: Manual Livewire State Sync
+            # ============================================================================
+            # PROBLEM: In headless Playwright, Livewire's wire:model bindings do NOT sync.
+            #          Even with click() + type() that simulates real typing, Livewire's
+            #          internal state (canonical.data.form) remains null while fields
+            #          LOOK correctly filled in the DOM.
+            #
+            # ROOT CAUSE: Unknown. Likely related to:
+            #             - Focus/blur event timing differences in headless Chrome
+            #             - Livewire 3's event listener registration
+            #             - Alpine.js hydration in headless mode
+            #             - Tab switching potentially detaching event listeners
+            #
+            # WORKAROUND: Manually read DOM values and write to Livewire's internal
+            #             canonical.data object via JavaScript. This bypasses wire:model
+            #             entirely but ensures Livewire has data when form submits.
+            #
+            # PROPER FIX: Find the correct event sequence that makes Livewire sync:
+            #             1. Try different event types (input, change, blur, keydown, etc)
+            #             2. Try different timing/delays between events
+            #             3. Check if Alpine.js $wire proxy needs explicit calls
+            #             4. Test with non-headless mode to isolate issue
+            #             5. Check Livewire 3 docs for Playwright-specific guidance
+            #
+            # RISKS:     - If ClaimTitan updates Livewire and canonical.data structure
+            #              changes, this will break
+            #            - If Livewire needs other internal state flags we're not setting,
+            #              form submission might fail in edge cases
+            #
+            # MONITORING: Watch for Livewire errors in logs. If you see "form is null"
+            #             errors or submission failures, the Livewire structure changed.
+            #
+            # TESTED:    Works consistently as of 2026-02-25 with Livewire 3 on ClaimTitan
+            # ============================================================================
             self.logger.info(f"  Manually syncing DOM values to Livewire state...")
 
             sync_result = self.adapter.page.evaluate('''() => {
