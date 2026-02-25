@@ -305,24 +305,32 @@ class CheckDepositFeature:
             # Click Save button (same pattern as working comments feature)
             self.logger.info(f"  Submitting form...")
 
-            # Debug: Check if button is disabled
-            is_disabled = save_button.get_attribute('disabled')
-            self.logger.info(f"  Button disabled: {is_disabled}")
-
-            # Debug: Get all form values before submit
-            try:
-                amount_val = self.adapter.page.locator('input[wire\\:model="form.amount"]').first.input_value()
-                self.logger.info(f"  Form amount value: '{amount_val}'")
-            except:
-                pass
-
-            # Ensure button is visible and clickable
+            # Ensure button is visible
             save_button.wait_for(state='visible', timeout=5000)
 
-            # Click the button
-            self.logger.info(f"  Attempting click...")
-            save_button.click()
-            self.logger.info(f"  Click completed")
+            # Scroll the slideover footer (with Save button) into view
+            try:
+                self.logger.info(f"  Scrolling Save button into view...")
+                save_button.scroll_into_view_if_needed(timeout=5000)
+                self.adapter.page.wait_for_timeout(500)
+                self.logger.info(f"  ✓ Button scrolled into view")
+            except Exception as e:
+                self.logger.warning(f"  Could not scroll button: {e}")
+
+            # Check if any overlay is covering the button
+            try:
+                loading_overlay = self.adapter.page.locator('[wire\\:loading].overlay, .overlay.is-visible').first
+                if loading_overlay.is_visible(timeout=1000):
+                    self.logger.warning(f"  Loading overlay still visible, waiting...")
+                    loading_overlay.wait_for(state='hidden', timeout=10000)
+                    self.logger.info(f"  ✓ Loading overlay cleared")
+            except:
+                pass  # No overlay, good
+
+            # Click with force=True to bypass actionability checks
+            self.logger.info(f"  Clicking Save button...")
+            save_button.click(force=True)
+            self.logger.info(f"  ✓ Click completed")
 
             # Wait for the form submission to be processed (AJAX-based)
             self.adapter.page.wait_for_timeout(3000)
