@@ -307,24 +307,20 @@ class CheckDepositFeature:
             # Wait a moment to ensure all Livewire updates are complete
             self.adapter.page.wait_for_timeout(1000)
 
-            # Find Save button
-            save_button = self.adapter.page.locator('button[type="submit"]:has-text("Save")').first
+            # Find Apply button (NOT "Save" - the button actually says "Apply")
+            save_button = self.adapter.page.locator('button[type="submit"]:has-text("Apply")').first
 
             # Check if button is enabled (not disabled)
-            self.logger.info(f"  Checking if Save button is enabled...")
+            self.logger.info(f"  Checking if Apply button is enabled...")
             is_disabled = save_button.get_attribute('disabled')
             if is_disabled:
-                self.logger.warning(f"  Save button is disabled, waiting for it to become enabled...")
+                self.logger.warning(f"  Apply button is disabled, waiting for it to become enabled...")
                 self.adapter.page.wait_for_timeout(3000)
                 is_disabled = save_button.get_attribute('disabled')
                 if is_disabled:
-                    raise FormSubmissionError("Save button is still disabled after waiting")
+                    raise FormSubmissionError("Apply button is still disabled after waiting")
 
-            # Click Save button (same pattern as working comments feature)
-            self.logger.info(f"  Submitting form...")
-
-            # Ensure button is visible
-            save_button.wait_for(state='visible', timeout=5000)
+            self.logger.info(f"  Apply button is enabled")
 
             # Manually populate Livewire's data object from DOM values
             self.logger.info(f"  Manually syncing DOM values to Livewire state...")
@@ -375,19 +371,19 @@ class CheckDepositFeature:
             }''')
             self.logger.info(f"  Verified Livewire state after sync: {verify}")
 
-            # Now click the Save button
-            self.logger.info(f"  Clicking Save button after manual sync...")
+            # Now click the Apply button
+            self.logger.info(f"  Clicking Apply button after manual sync...")
             try:
                 save_button.click(force=True, timeout=5000)
             except Exception as e:
                 self.logger.warning(f"  Force click failed: {e}, trying JavaScript...")
                 self.adapter.page.evaluate('''() => {
                     const btn = document.querySelector('button[type="submit"]');
-                    if (btn && btn.textContent.includes('Save')) {
+                    if (btn && btn.textContent.includes('Apply')) {
                         btn.click();
                     }
                 }''')
-            self.logger.info(f"  ✓ Clicked Save button")
+            self.logger.info(f"  ✓ Clicked Apply button")
 
             # Wait for the form submission to be processed (AJAX-based)
             self.adapter.page.wait_for_timeout(3000)
@@ -428,7 +424,7 @@ class CheckDepositFeature:
                     else:
                         self.logger.info("  No validation errors found in DOM")
 
-                        # Debug: Check if Save button is actually clickable
+                        # Debug: Check if Apply button is actually clickable
                         btn_debug = self.adapter.page.evaluate('''() => {
                             const btn = document.querySelector('button[type="submit"]');
                             return {
@@ -438,7 +434,7 @@ class CheckDepositFeature:
                                 text: btn?.textContent
                             };
                         }''')
-                        self.logger.info(f"  Save button state: {btn_debug}")
+                        self.logger.info(f"  Apply button state: {btn_debug}")
 
                     # Take screenshot
                     screenshot_dir = self.config.SCREENSHOTS_DIR
