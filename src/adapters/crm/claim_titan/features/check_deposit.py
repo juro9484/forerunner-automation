@@ -321,7 +321,9 @@ class CheckDepositFeature:
 
             self.logger.info(f"  Save button is enabled")
 
-            # Manually populate Livewire's data object from DOM values
+            # HACK: Manually populate Livewire's data object from DOM values
+            # This is needed because wire:model bindings don't sync in headless Playwright
+            # TODO: Find proper event sequence to trigger Livewire sync naturally
             self.logger.info(f"  Manually syncing DOM values to Livewire state...")
 
             sync_result = self.adapter.page.evaluate('''() => {
@@ -405,12 +407,14 @@ class CheckDepositFeature:
             self.logger.info(f"  Waiting for form submission to complete...")
             self.adapter.page.wait_for_timeout(5000)
 
-            # Verify success - check if slideover closed
-            slideover_closed = False
+            # Verify success - check if the open slideover closed
+            # Success = .slideover.open is gone
             try:
-                slideover_footer = self.adapter.page.locator('div.slideover-footer').first
-                if slideover_footer.is_visible(timeout=2000):
-                    self.logger.warning("Slideover still visible after 5s - checking for validation errors...")
+                open_slideover = self.adapter.page.locator('.slideover.open')
+                is_still_open = open_slideover.count() > 0
+
+                if is_still_open:
+                    self.logger.warning("Slideover still open after 5s - checking for validation errors...")
 
                     # Check for validation error messages
                     error_messages = self.adapter.page.locator('.text-danger, .text-red-500, .error, [role="alert"]')
@@ -464,20 +468,20 @@ class CheckDepositFeature:
 
                     # Wait longer and check again
                     self.adapter.page.wait_for_timeout(5000)
-                    if slideover_footer.is_visible(timeout=2000):
-                        raise FormSubmissionError("Slideover did not close after 10s - form submission failed (check screenshot for validation errors)")
+                    is_still_open = open_slideover.count() > 0
+                    if is_still_open:
+                        raise FormSubmissionError("Slideover still open after 10s - form submission failed (check screenshot for validation errors)")
                     else:
-                        slideover_closed = True
                         self.logger.info(f"  ✓ Slideover closed after extended wait")
                 else:
-                    slideover_closed = True
+                    # Slideover closed immediately = success
                     self.logger.info(f"  ✓ Slideover closed - submission successful")
+
             except FormSubmissionError:
                 raise
-            except:
-                # Slideover not visible = success
-                slideover_closed = True
-                self.logger.info(f"  ✓ Slideover closed - submission successful")
+            except Exception as e:
+                # Any other error - assume success if we can't find open slideover
+                self.logger.info(f"  ✓ Slideover closed - submission successful (error checking: {e})")
 
             self.logger.info(f"  ✓ Form submitted")
 
