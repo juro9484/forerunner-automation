@@ -327,22 +327,36 @@ class CheckDepositFeature:
 
             result = self.adapter.page.evaluate("""
                 () => {
-                    // Find the Livewire component on the form
+                    // Try multiple methods to trigger Livewire save
+
+                    // Method 1: Find the form and get its Livewire component ID
                     const form = document.querySelector('form[wire\\\\:submit="save"]');
                     if (!form) {
                         return { success: false, error: 'Form not found' };
                     }
-                    if (!form.__livewire) {
-                        return { success: false, error: 'Livewire component not found on form' };
+
+                    // Method 2: Try using Livewire.find() with the component ID
+                    const wireId = form.getAttribute('wire:id');
+                    if (wireId && window.Livewire) {
+                        try {
+                            const component = window.Livewire.find(wireId);
+                            if (component) {
+                                component.call('save');
+                                console.log('Livewire save() via Livewire.find() succeeded');
+                                return { success: true };
+                            }
+                        } catch (error) {
+                            return { success: false, error: 'Livewire.find() failed: ' + error.message };
+                        }
                     }
 
+                    // Method 3: Just submit the form traditionally
                     try {
-                        // Call the save method directly on the Livewire component
-                        form.__livewire.call('save');
-                        console.log('Livewire save() called successfully');
+                        form.submit();
+                        console.log('Form submitted via form.submit()');
                         return { success: true };
                     } catch (error) {
-                        return { success: false, error: error.message };
+                        return { success: false, error: 'Form submit failed: ' + error.message };
                     }
                 }
             """)
