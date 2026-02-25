@@ -58,18 +58,22 @@ class CheckParser:
         self.client = anthropic.Anthropic(api_key=Config.ANTHROPIC_API_KEY)
         self.vision_model = Config.CLAUDE_VISION_MODEL
 
-    def parse_check(self, pdf_path: Path) -> Optional[CheckData]:
+    def parse_check(self, pdf_path) -> Optional[CheckData]:
         """
         Parse a check PDF and extract structured data.
         Handles multi-page PDFs (blank pages, summary + check image, etc).
 
         Args:
-            pdf_path: Path to check PDF file
+            pdf_path: Path to check PDF file (string or Path object)
 
         Returns:
             CheckData if extraction successful, None otherwise
         """
         try:
+            # Convert to Path if string
+            if isinstance(pdf_path, str):
+                pdf_path = Path(pdf_path)
+
             self.logger.info(f"Parsing check PDF: {pdf_path.name}")
 
             # Read and encode entire PDF (Claude Vision will read all pages)
