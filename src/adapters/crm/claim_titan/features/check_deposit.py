@@ -326,38 +326,36 @@ class CheckDepositFeature:
             # Ensure button is visible
             save_button.wait_for(state='visible', timeout=5000)
 
-            # DEBUG: Check if Livewire has the form data now
-            self.logger.info(f"  DEBUG: Checking Livewire state before submit...")
-            livewire_state = self.adapter.page.evaluate('''() => {
-                const components = window.Livewire?.all() || [];
-                if (components.length > 0) {
-                    const comp = components[0];
-                    return {
-                        hasFormData: comp.canonical?.data?.form !== null && comp.canonical?.data?.form !== undefined,
-                        formAmount: comp.canonical?.data?.form?.amount || null,
-                        formStatus: comp.canonical?.data?.form?.status || null,
-                        isLoading: comp.canonical?.effects?.loading?.length > 0
-                    };
-                }
-                return {error: 'No Livewire components found'};
-            }''')
-            self.logger.info(f"  Livewire state: {livewire_state}")
+            # Bypass form submit button - call Livewire's save() method directly
+            self.logger.info(f"  Calling Livewire component save() method directly...")
 
-            # Click Save button with force to bypass viewport checks
-            # (Livewire now has all form data thanks to input event dispatching)
-            self.logger.info(f"  Clicking Save button (force)...")
-            try:
-                save_button.click(force=True, timeout=5000)
-            except Exception as e:
-                # If force click fails, try JavaScript click as fallback
-                self.logger.warning(f"  Force click failed: {e}, trying JavaScript...")
-                self.adapter.page.evaluate('''() => {
-                    const btn = document.querySelector('button[type="submit"]');
-                    if (btn && btn.textContent.includes('Save')) {
-                        btn.click();
+            result = self.adapter.page.evaluate('''() => {
+                const components = window.Livewire?.all() || [];
+
+                // Find the component that has a save method
+                for (let comp of components) {
+                    if (typeof comp.save === 'function' || typeof comp.call === 'function') {
+                        try {
+                            // Try calling save() if it exists
+                            if (typeof comp.save === 'function') {
+                                comp.save();
+                                return {success: true, method: 'save()', id: comp.id};
+                            }
+                            // Or try call('save') for Livewire 3
+                            if (typeof comp.call === 'function') {
+                                comp.call('save');
+                                return {success: true, method: 'call(save)', id: comp.id};
+                            }
+                        } catch (e) {
+                            return {success: false, error: e.message};
+                        }
                     }
-                }''')
-            self.logger.info(f"  ✓ Clicked Save button")
+                }
+
+                return {success: false, error: 'No component with save method found'};
+            }''')
+
+            self.logger.info(f"  Livewire save result: {result}")
 
             self.logger.info(f"  ✓ Pressed Enter on amount field")
 
