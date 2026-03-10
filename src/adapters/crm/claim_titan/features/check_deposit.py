@@ -283,14 +283,25 @@ class CheckDepositFeature:
             status_select.select_option("1")
             self.logger.info(f"    ✓ Status: Received")
 
-            # Date Issued
+            # Date Issued — type as MMDDYYYY digits for date input
             date_input = self.adapter.page.locator('input[wire\\:model="form.issue_date"]').first
-            self._fill_livewire_field(date_input, check_data.check_date, "Date Issued")
+            date_input.click()
+            self.adapter.page.wait_for_timeout(100)
+            # Convert YYYY-MM-DD to MMDDYYYY
+            issue_parts = str(check_data.check_date).split('-')
+            issue_mmddyyyy = f"{issue_parts[1]}{issue_parts[2]}{issue_parts[0]}"
+            date_input.type(issue_mmddyyyy, delay=10)
+            self.adapter.page.wait_for_timeout(100)
+            self.logger.info(f"    ✓ Date Issued: {check_data.check_date} (typed as {issue_mmddyyyy})")
 
-            # Date Received (use today's date)
-            today = datetime.now().strftime('%Y-%m-%d')
+            # Date Received — type as MMDDYYYY digits for date input
             received_input = self.adapter.page.locator('input[wire\\:model="form.date_received"]').first
-            self._fill_livewire_field(received_input, today, "Date Received")
+            received_input.click()
+            self.adapter.page.wait_for_timeout(100)
+            today = datetime.now().strftime('%m%d%Y')
+            received_input.type(today, delay=10)
+            self.adapter.page.wait_for_timeout(100)
+            self.logger.info(f"    ✓ Date Received: {today}")
 
             # Click Images tab to reveal file upload section
             self.logger.info(f"  Switching to Images tab...")
