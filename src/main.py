@@ -194,10 +194,8 @@ def main():
                         check_keywords = [
                             "check",
                             "checks",
-                            "payment",
                             "new check",
                             "carrier check",
-                            "new payment"
                         ]
                         is_check = any(keyword in subject_lower for keyword in check_keywords)
 
