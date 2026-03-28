@@ -221,13 +221,31 @@ def main():
 
                             # Find all PDF attachments (each PDF = one check)
                             if not email_data.attachments:
-                                logger.warning("Check email has no attachments, skipping")
+                                logger.warning("Check email has no attachments, marking as skipped")
+                                database.mark_processed(
+                                    email_id=email_data.email_id,
+                                    claim_number="N/A",
+                                    sender=email_data.sender,
+                                    subject=email_data.subject,
+                                    received_timestamp=email_data.timestamp,
+                                    status="skipped",
+                                    error_message="No attachments"
+                                )
                                 continue
 
                             pdf_attachments = [att for att in email_data.attachments
                                              if att.filename.lower().endswith('.pdf')]
                             if not pdf_attachments:
-                                logger.warning("No PDF attachments found in check email")
+                                logger.warning("No PDF attachments found in check email, marking as skipped")
+                                database.mark_processed(
+                                    email_id=email_data.email_id,
+                                    claim_number="N/A",
+                                    sender=email_data.sender,
+                                    subject=email_data.subject,
+                                    received_timestamp=email_data.timestamp,
+                                    status="skipped",
+                                    error_message="No PDF attachments"
+                                )
                                 continue
 
                             logger.info(f"Found {len(pdf_attachments)} check PDF(s) to process")
@@ -359,13 +377,31 @@ def main():
 
                             # Parse contract PDF
                             if not email_data.attachments:
-                                logger.warning("Contract email has no attachments, skipping")
+                                logger.warning("Contract email has no attachments, marking as skipped")
+                                database.mark_processed(
+                                    email_id=email_data.email_id,
+                                    claim_number="N/A",
+                                    sender=email_data.sender,
+                                    subject=email_data.subject,
+                                    received_timestamp=email_data.timestamp,
+                                    status="skipped",
+                                    error_message="No attachments"
+                                )
                                 continue
 
                             pdf_attachment = next((att for att in email_data.attachments
                                                  if att.filename.lower().endswith('.pdf')), None)
                             if not pdf_attachment:
-                                logger.warning("No PDF attachment found in contract email")
+                                logger.warning("No PDF attachment found in contract email, marking as skipped")
+                                database.mark_processed(
+                                    email_id=email_data.email_id,
+                                    claim_number="N/A",
+                                    sender=email_data.sender,
+                                    subject=email_data.subject,
+                                    received_timestamp=email_data.timestamp,
+                                    status="skipped",
+                                    error_message="No PDF attachment"
+                                )
                                 continue
 
                             client_data = contract_parser.parse_contract(pdf_attachment.file_path)
