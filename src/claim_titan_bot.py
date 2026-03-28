@@ -856,6 +856,9 @@ class ClaimTitanBot:
             # Add variation without any hyphens
             variations.append(claim_number.replace('-', ''))
 
+        # Never try variations that have no numbers (e.g. just "CAHO")
+        variations = [v for v in variations if any(c.isdigit() for c in v)]
+
         self.logger.info(f"  Will try {len(variations)} variation(s): {variations}")
 
         # RETRY LOGIC: Claim might be indexing, retry with delay
