@@ -283,13 +283,15 @@ class ClaimTitanAdapter:
                 else:
                     raise SearchError(f"Search box not found after 3 attempts. URL: {self.page.url}. Error: {e}")
 
-        # Build list of variations to try
+        # Build list of variations to try (most specific first)
         variations = [claim_number]
 
         if '-' in claim_number:
+            # Try without hyphens first (more specific than truncated prefix)
+            variations.append(claim_number.replace('-', ''))
+            # Then try without last suffix (e.g., "01-009-240484" -> "01-009")
             if claim_number.count('-') >= 1:
                 variations.append(claim_number.rsplit('-', 1)[0])
-            variations.append(claim_number.replace('-', ''))
 
         # Never try variations that have no numbers (e.g. just "CAHO")
         variations = [v for v in variations if any(c.isdigit() for c in v)]
