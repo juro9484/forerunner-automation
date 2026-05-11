@@ -323,26 +323,42 @@ class ClaimTitanAdapter:
                 if self._has_claim_results():
                     self.logger.info(f"  Found results, verifying clickable link exists...")
                     try:
-                        claim_row = self.page.locator(f'div.columns:has(span:has-text("{variation}"))').first
-                        if claim_row.is_visible(timeout=2000):
-                            all_links = claim_row.locator('a')
-                            link_count = all_links.count()
+                        # When using a shorter variation, try matching rows by the original claim number first
+                        # to avoid clicking a different claim that shares the same prefix
+                        row_match_targets = [variation]
+                        if variation != claim_number:
+                            row_match_targets = [claim_number, variation]
+                            self.logger.info(f"  Short variation used for search, will try row match by original '{claim_number}' first")
 
-                            for i in range(link_count):
-                                link = all_links.nth(i)
-                                href = link.get_attribute('href')
-                                if href and '/claims/' in href and not any(x in href for x in ['/board', '/jobs', '?']):
-                                    claim_id = href.split('/claims/')[-1]
-                                    if claim_id.isdigit():
-                                        if attempt > 0:
-                                            self.logger.info(f"✓ Found clickable claim with format: {variation} (after {attempt + 1} attempts)")
-                                        else:
-                                            self.logger.info(f"✓ Found clickable claim with format: {variation}")
-                                        return variation
+                        for row_target in row_match_targets:
+                            matching_rows = self.page.locator(f'div.columns:has(span:has-text("{row_target}"))')
+                            row_count = matching_rows.count()
+                            self.logger.info(f"  Found {row_count} row(s) matching '{row_target}'")
 
-                            self.logger.info(f"  Found results for '{variation}' but no valid claim link, trying next...")
-                        else:
-                            self.logger.info(f"  Row not visible for '{variation}', trying next...")
+                            for row_idx in range(row_count):
+                                claim_row = matching_rows.nth(row_idx)
+                                if not claim_row.is_visible(timeout=2000):
+                                    continue
+
+                                all_links = claim_row.locator('a')
+                                link_count = all_links.count()
+
+                                for i in range(link_count):
+                                    link = all_links.nth(i)
+                                    href = link.get_attribute('href')
+                                    if href and '/claims/' in href and not any(x in href for x in ['/board', '/jobs', '?']):
+                                        claim_id = href.split('/claims/')[-1]
+                                        if claim_id.isdigit():
+                                            found_format = row_target if row_target == variation else variation
+                                            if attempt > 0:
+                                                self.logger.info(f"✓ Found clickable claim with format: {found_format} (row matched '{row_target}', after {attempt + 1} attempts)")
+                                            else:
+                                                self.logger.info(f"✓ Found clickable claim with format: {found_format} (row matched '{row_target}')")
+                                            return row_target
+
+                            self.logger.info(f"  No valid claim link in rows matching '{row_target}', trying next...")
+
+                        self.logger.info(f"  Found results for '{variation}' but no valid claim link in any row, trying next...")
                     except Exception as e:
                         self.logger.info(f"  Error checking link for '{variation}': {e}, trying next...")
                 else:
