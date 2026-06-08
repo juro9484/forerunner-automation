@@ -287,14 +287,15 @@ class ClaimTitanAdapter:
         variations = [claim_number]
 
         if '-' in claim_number:
-            # Try without hyphens first (more specific than truncated prefix)
+            # Try base number before first hyphen (e.g., "7008533516-1-3" -> "7008533516")
+            base = claim_number.split('-', 1)[0]
+            if base not in variations:
+                variations.append(base)
+            # Try without hyphens (e.g., "01-009-240484" -> "01009240484")
             variations.append(claim_number.replace('-', ''))
-            # Then try without last suffix (e.g., "01-009-240484" -> "01-009")
-            if claim_number.count('-') >= 1:
-                variations.append(claim_number.rsplit('-', 1)[0])
 
-        # Never try variations that have no numbers (e.g. just "CAHO")
-        variations = [v for v in variations if any(c.isdigit() for c in v)]
+        # Filter out variations that have no digits or are too short to be useful
+        variations = [v for v in variations if any(c.isdigit() for c in v) and len(v) >= 5]
 
         self.logger.info(f"  Will try {len(variations)} variation(s): {variations}")
 
