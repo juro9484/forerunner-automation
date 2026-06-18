@@ -106,6 +106,12 @@ class Config:
         "juanrod2000@gmail.com,juan@roaksystems.com,support@roaksystems.com,leif@roaksystems.com"
     ).split(",")
 
+    # Stakeholder notification (claim not found alerts go to client + team)
+    NOTIFICATION_STAKEHOLDER_EMAILS: list = os.getenv(
+        "NOTIFICATION_STAKEHOLDER_EMAILS",
+        "beau@forerunnerclaims.com,juan@roaksystems.com,leif@roaksystems.com"
+    ).split(",")
+
     # Healthchecks.io Configuration
     HEALTHCHECKS_ENABLED: bool = os.getenv("HEALTHCHECKS_ENABLED", "false").lower() == "true"
     HEALTHCHECKS_PING_URL: str = os.getenv("HEALTHCHECKS_PING_URL", "")

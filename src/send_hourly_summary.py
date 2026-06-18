@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Hourly summary email script.
-Reads metrics from the last hour and sends summary email.
-Run via cron every hour.
+Periodic summary email script.
+Reads metrics from the last 3 hours and sends summary email.
+Run via cron every 3 hours.
 """
 
 import sys
@@ -32,11 +32,11 @@ def main():
         from email_database import EmailDatabase
         database = EmailDatabase()
 
-        # Time period
+        # Time period (last 3 hours)
         now = datetime.now()
-        one_hour_ago = now - timedelta(hours=1)
+        three_hours_ago = now - timedelta(hours=3)
         period_end = now.strftime('%Y-%m-%d %H:%M')
-        period_start = one_hour_ago.strftime('%Y-%m-%d %H:%M')
+        period_start = three_hours_ago.strftime('%Y-%m-%d %H:%M')
 
         # Query database for hourly stats using context manager
         with database._get_connection() as conn:
@@ -50,7 +50,7 @@ def main():
                     SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed
                 FROM processed_emails
                 WHERE processed_timestamp >= ?
-            """, (one_hour_ago.isoformat(),))
+            """, (three_hours_ago.isoformat(),))
 
             row = cursor.fetchone()
             total_processed = row[0] if row[0] else 0
@@ -65,7 +65,7 @@ def main():
                 WHERE processed_timestamp >= ?
                 AND status = 'success'
                 AND claim_number LIKE '%check(s)%'
-            """, (one_hour_ago.isoformat(),))
+            """, (three_hours_ago.isoformat(),))
             checks_deposited = cursor.fetchone()[0] or 0
 
             # Notes posted have claim numbers that are not 'N/A' and not check deposits
@@ -76,7 +76,7 @@ def main():
                 AND status = 'success'
                 AND claim_number != 'N/A'
                 AND claim_number NOT LIKE '%check(s)%'
-            """, (one_hour_ago.isoformat(),))
+            """, (three_hours_ago.isoformat(),))
             notes_posted = cursor.fetchone()[0] or 0
 
             # Claims created have claim_number = 'N/A'
@@ -86,7 +86,7 @@ def main():
                 WHERE processed_timestamp >= ?
                 AND status = 'success'
                 AND claim_number = 'N/A'
-            """, (one_hour_ago.isoformat(),))
+            """, (three_hours_ago.isoformat(),))
             claims_created = cursor.fetchone()[0] or 0
 
         # Initialize email notifier
@@ -111,10 +111,10 @@ def main():
         )
 
         if success:
-            logger.info("Hourly summary email sent successfully")
+            logger.info("Summary email sent successfully")
             return 0
         else:
-            logger.error("Failed to send hourly summary email")
+            logger.error("Failed to send summary email")
             return 1
 
     except Exception as e:

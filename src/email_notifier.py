@@ -245,12 +245,12 @@ Service status: sudo systemctl status forerunner-monitor
             status_emoji = "❌"
             status_color = "#f44336"
 
-        subject = f"{status_emoji} {client_id} - Hourly Summary ({success_rate:.0f}% success)"
+        subject = f"{status_emoji} {client_id} - 3-Hour Summary ({success_rate:.0f}% success)"
 
         body_html = f"""
         <html>
         <body style="font-family: Arial, sans-serif;">
-            <h2 style="color: {status_color};">{status_emoji} Hourly Summary Report</h2>
+            <h2 style="color: {status_color};">{status_emoji} 3-Hour Summary Report</h2>
 
             <div style="background: #f5f5f5; padding: 15px; border-radius: 5px; margin: 10px 0;">
                 <p><strong>Client:</strong> {client_id}</p>

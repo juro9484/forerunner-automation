@@ -96,6 +96,117 @@ def send_failure_notification(error_message: str, error_details: str = None):
         logging.getLogger(__name__).error(f"Failed to send notification email: {e}")
 
 
+def send_processing_failure_alert(email_type: str, claim_number: str, error_message: str, subject: str = None, sender: str = None):
+    """
+    Send email notification when a comment or contract fails to process.
+
+    Args:
+        email_type: "comment" or "contract"
+        claim_number: Claim number that failed
+        error_message: Error description
+        subject: Original email subject
+        sender: Original email sender
+    """
+    if not Config.NOTIFICATIONS_ENABLED:
+        return
+
+    try:
+        notifier = EmailNotifier(
+            smtp_server=Config.NOTIFICATION_SMTP_SERVER,
+            smtp_port=Config.NOTIFICATION_SMTP_PORT,
+            from_email=Config.NOTIFICATION_FROM_EMAIL,
+            from_password=Config.NOTIFICATION_FROM_PASSWORD,
+            to_emails=Config.NOTIFICATION_TO_EMAILS
+        )
+
+        type_label = "Note Posting" if email_type == "comment" else "Claim Creation"
+        alert_subject = f"❌ ALERT: {Config.CLIENT_ID} - {type_label} Failed"
+
+        from datetime import datetime
+        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+        body_html = f"""
+        <html>
+        <body style="font-family: Arial, sans-serif;">
+            <h2 style="color: #f44336;">❌ {type_label} Failed</h2>
+            <div style="background: #f5f5f5; padding: 15px; border-radius: 5px; margin: 10px 0;">
+                <p><strong>Client:</strong> {Config.CLIENT_ID}</p>
+                <p><strong>Time:</strong> {timestamp}</p>
+                <p><strong>Claim:</strong> {claim_number}</p>
+                {f'<p><strong>From:</strong> {sender}</p>' if sender else ''}
+                {f'<p><strong>Subject:</strong> {subject}</p>' if subject else ''}
+            </div>
+            <p><strong>Error:</strong> {error_message}</p>
+            <hr>
+            <p style="color: #666; font-size: 12px;">
+                Check logs: <code>tail -50 logs/forerunner_claims.log</code>
+            </p>
+        </body>
+        </html>
+        """
+
+        notifier.send_email(alert_subject, body_html)
+        logging.getLogger(__name__).info(f"  ✓ Sent {email_type} failure alert email")
+    except Exception as e:
+        logging.getLogger(__name__).error(f"  ! Failed to send {email_type} failure alert: {e}")
+
+
+def send_claim_not_found_alert(claim_number: str, email_type: str, subject: str = None, sender: str = None):
+    """
+    Send alert to stakeholders when a claim is not found in Claim Titan.
+    This goes to the client (Beau) so they can create the claim.
+
+    Args:
+        claim_number: Claim number that wasn't found
+        email_type: "note" or "check"
+        subject: Original email subject
+        sender: Original email sender
+    """
+    if not Config.NOTIFICATIONS_ENABLED:
+        return
+
+    try:
+        notifier = EmailNotifier(
+            smtp_server=Config.NOTIFICATION_SMTP_SERVER,
+            smtp_port=Config.NOTIFICATION_SMTP_PORT,
+            from_email=Config.NOTIFICATION_FROM_EMAIL,
+            from_password=Config.NOTIFICATION_FROM_PASSWORD,
+            to_emails=Config.NOTIFICATION_STAKEHOLDER_EMAILS
+        )
+
+        from datetime import datetime
+        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        type_label = "email note" if email_type == "note" else "carrier check"
+
+        alert_subject = f"Claim Not Found: {claim_number} - {type_label} could not be processed"
+
+        body_html = f"""
+        <html>
+        <body style="font-family: Arial, sans-serif;">
+            <h2 style="color: #ff9800;">Claim Not Found in Claim Titan</h2>
+            <p>A {type_label} was received but could not be processed because the claim was not found in Claim Titan.</p>
+            <div style="background: #f5f5f5; padding: 15px; border-radius: 5px; margin: 10px 0;">
+                <p><strong>Claim Number:</strong> {claim_number}</p>
+                <p><strong>Type:</strong> {type_label}</p>
+                <p><strong>Time:</strong> {timestamp}</p>
+                {f'<p><strong>From:</strong> {sender}</p>' if sender else ''}
+                {f'<p><strong>Subject:</strong> {subject}</p>' if subject else ''}
+            </div>
+            <p>Please verify the claim exists in Claim Titan. Once the claim is created or corrected, the email will be reprocessed automatically.</p>
+            <hr>
+            <p style="color: #666; font-size: 12px;">
+                This is an automated alert from Forerunner Claims Automation.
+            </p>
+        </body>
+        </html>
+        """
+
+        notifier.send_email(alert_subject, body_html)
+        logging.getLogger(__name__).info(f"  ✓ Sent claim-not-found alert to stakeholders for {claim_number}")
+    except Exception as e:
+        logging.getLogger(__name__).error(f"  ! Failed to send claim-not-found alert: {e}")
+
+
 def send_startup_notification():
     """Send startup notification to verify email is working."""
     if not Config.NOTIFICATIONS_ENABLED:
@@ -339,6 +450,12 @@ def main():
                                         except Exception as e:
                                             logger.error(f"  ! Failed to send failure alert: {e}")
 
+                                        if "not found" in (result.error_message or "").lower():
+                                            send_claim_not_found_alert(
+                                                check_data.claim_number, "check",
+                                                email_data.subject, email_data.sender
+                                            )
+
                                 except Exception as e:
                                     logger.error(f"  ✗ Error processing check {pdf_attachment.filename}: {e}", exc_info=True)
                                     checks_failed += 1
@@ -446,6 +563,10 @@ def main():
                                 )
                                 metrics.record_claim_created(success=False)
                                 failed_count += 1
+                                send_processing_failure_alert(
+                                    "contract", client_data.claim_number or "N/A",
+                                    result.error_message, email_data.subject, email_data.sender
+                                )
 
                         else:
                             # Process as regular email (post note)
@@ -494,6 +615,15 @@ def main():
                                 )
                                 metrics.record_note_posted(success=False)
                                 failed_count += 1
+                                send_processing_failure_alert(
+                                    "comment", email_data.claim_number,
+                                    result.error_message, email_data.subject, email_data.sender
+                                )
+                                if "not found" in (result.error_message or "").lower():
+                                    send_claim_not_found_alert(
+                                        email_data.claim_number, "note",
+                                        email_data.subject, email_data.sender
+                                    )
 
                         logger.info("="*80)
 
