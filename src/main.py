@@ -192,7 +192,7 @@ def send_claim_not_found_alert(claim_number: str, email_type: str, subject: str 
                 {f'<p><strong>From:</strong> {sender}</p>' if sender else ''}
                 {f'<p><strong>Subject:</strong> {subject}</p>' if subject else ''}
             </div>
-            <p>Please verify the claim exists in Claim Titan and manually process this email.</p>
+            <p>Please verify the claim exists in Claim Titan. Once the claim is created, future emails for this claim will be processed automatically.</p>
             <hr>
             <p style="color: #666; font-size: 12px;">
                 This is an automated alert from Forerunner Claims Automation.
