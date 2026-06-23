@@ -184,7 +184,7 @@ def send_claim_not_found_alert(claim_number: str, email_type: str, subject: str 
         <html>
         <body style="font-family: Arial, sans-serif;">
             <h2 style="color: #ff9800;">Claim Not Found in Claim Titan</h2>
-            <p>A {type_label} was received but could not be processed because the claim was not found in Claim Titan.</p>
+            <p>An {type_label} was received but could not be processed because the claim was not found in Claim Titan.</p>
             <div style="background: #f5f5f5; padding: 15px; border-radius: 5px; margin: 10px 0;">
                 <p><strong>Claim Number:</strong> {claim_number}</p>
                 <p><strong>Type:</strong> {type_label}</p>
@@ -192,7 +192,7 @@ def send_claim_not_found_alert(claim_number: str, email_type: str, subject: str 
                 {f'<p><strong>From:</strong> {sender}</p>' if sender else ''}
                 {f'<p><strong>Subject:</strong> {subject}</p>' if subject else ''}
             </div>
-            <p>Please verify the claim exists in Claim Titan. Once the claim is created or corrected, the email will be reprocessed automatically.</p>
+            <p>Please verify the claim exists in Claim Titan and manually process this email.</p>
             <hr>
             <p style="color: #666; font-size: 12px;">
                 This is an automated alert from Forerunner Claims Automation.
