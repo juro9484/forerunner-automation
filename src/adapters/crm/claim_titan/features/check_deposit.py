@@ -201,8 +201,10 @@ class CheckDepositFeature:
         try:
             self.logger.info(f"  Clicking 'Add Check' button...")
 
-            # Find and click the Add Check button
-            add_button = self.adapter.page.locator('button:has-text("Add")').first
+            # Find and click the Add Check button. Must match the full "Add Check"
+            # label: the page also has a generic mini "Add" button earlier in the
+            # DOM with pointer-events:none, which is visible but never clickable.
+            add_button = self.adapter.page.locator('button:has-text("Add Check")').first
             add_button.wait_for(state='visible', timeout=10000)
             add_button.click()
 
