@@ -706,37 +706,43 @@ class ClaimTitanBot:
             except Exception as e:
                 raise ClaimTitanError(f"Failed at STEP 11 (waiting for form submission to complete): {e}")
 
-            # Get the URL of the created claim
+            # Get the URL after submission
             claim_url = self.page.url
 
-            # VALIDATE: Ensure we got a real claim URL, not the list page
-            current_step = "validating claim URL"
-            self.logger.info(f"[STEP 12] Validating claim URL...")
-            try:
-                if not "/claims/" in claim_url or claim_url.endswith("/claims") or claim_url.endswith("/claims/"):
-                    raise ClaimTitanError(
-                        f"Invalid claim URL after creation: {claim_url}. "
-                        "Expected URL with /claims/[id], but got list page instead. "
-                        "Claim may have been created but URL is incorrect."
-                    )
-
-                # Extract and validate claim ID
-                import re
-                claim_id_match = re.search(r'/claims/(\d+)', claim_url)
-                if not claim_id_match:
-                    raise ClaimTitanError(
-                        f"Cannot extract claim ID from URL: {claim_url}. "
-                        "Expected format: https://claimtitan.com/claims/[number]"
-                    )
-
-                claim_id = claim_id_match.group(1)
-                self.logger.info(f"  ✓ Claim created with ID: {claim_id}")
+            # VERIFY: Claim Titan used to redirect to the new claim's detail page
+            # (/claims/<id>) after save, but now returns to the claims list with a
+            # filter query (e.g. /claims?fs[loss_type]=2). Accept a detail-page
+            # redirect if we got one; otherwise verify creation by searching for
+            # the claim number and opening the claim — which also leaves us on the
+            # claim page, as _add_policy_to_claim expects.
+            current_step = "verifying claim was created"
+            self.logger.info(f"[STEP 12] Verifying claim was created...")
+            import re
+            claim_id_match = re.search(r'/claims/(\d+)', claim_url)
+            if claim_id_match:
+                self.logger.info(f"  ✓ Redirected to claim detail page (ID: {claim_id_match.group(1)})")
                 self.logger.info(f"  ✓ Valid claim URL: {claim_url}")
-                self.logger.info("✓ [STEP 12 COMPLETE] Claim URL validated")
-
-            except ClaimTitanError as e:
-                # URL validation failed
-                raise e
+            elif client_data.claim_number:
+                self.logger.info(f"  Redirected to '{claim_url}' instead of claim detail page")
+                self.logger.info(f"  Verifying by searching for claim number: {client_data.claim_number}")
+                try:
+                    found_format = self._search_claim(client_data.claim_number)
+                    self._open_claim(found_format, client_data.claim_number)
+                except Exception as e:
+                    raise ClaimTitanError(
+                        f"Could not find claim {client_data.claim_number} after submitting "
+                        f"the creation form (redirect URL was {claim_url}). "
+                        f"The claim may not have been created. Error: {e}"
+                    )
+                claim_url = self.page.url
+                self.logger.info(f"  ✓ Claim verified via search, now on claim page: {claim_url}")
+            else:
+                raise ClaimTitanError(
+                    f"Cannot verify claim creation: redirected to {claim_url} (not a claim "
+                    "detail page) and contract has no claim number to search for. "
+                    "Claim may have been created — check Claim Titan before reprocessing."
+                )
+            self.logger.info("✓ [STEP 12 COMPLETE] Claim creation verified")
 
             self.logger.info(f"✓ Successfully created claim for {client_name}")
             self.logger.info(f"✓ Claim URL: {claim_url}")
