@@ -272,7 +272,12 @@ class ClaimTitanAdapter:
         search_box = None
         for i in range(3):
             try:
-                search_box = self.page.get_by_placeholder("Search by Claim Number, Job")
+                # Placeholder text has changed across Claim Titan UI updates:
+                #   old: "Search by Claim Number, Job..."
+                #   new: "Search claims by number, name, address, policyholder, carrier, or policy"
+                search_box = self.page.locator(
+                    'input[placeholder*="Claim Number" i], input[placeholder*="Search claims" i]'
+                ).first
                 search_box.wait_for(state='visible', timeout=10000)
                 self.logger.info(f"  ✓ Found search box")
                 break
