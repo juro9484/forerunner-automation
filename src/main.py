@@ -96,9 +96,11 @@ def send_failure_notification(error_message: str, error_details: str = None):
         logging.getLogger(__name__).error(f"Failed to send notification email: {e}")
 
 
-def send_processing_failure_alert(email_type: str, claim_number: str, error_message: str, subject: str = None, sender: str = None):
+def send_processing_failure_alert(email_type: str, claim_number: str, error_message: str, subject: str = None, sender: str = None, screenshot_path: str = None):
     """
     Send email notification when a comment or contract fails to process.
+    Goes to the support team (NOTIFICATION_TO_EMAILS) only — screenshot
+    attachments are for internal debugging, not stakeholders.
 
     Args:
         email_type: "comment" or "contract"
@@ -106,6 +108,7 @@ def send_processing_failure_alert(email_type: str, claim_number: str, error_mess
         error_message: Error description
         subject: Original email subject
         sender: Original email sender
+        screenshot_path: Error screenshot to attach (optional)
     """
     if not Config.NOTIFICATIONS_ENABLED:
         return
@@ -137,6 +140,7 @@ def send_processing_failure_alert(email_type: str, claim_number: str, error_mess
                 {f'<p><strong>Subject:</strong> {subject}</p>' if subject else ''}
             </div>
             <p><strong>Error:</strong> {error_message}</p>
+            {'<p><strong>Screenshot at time of failure is attached.</strong></p>' if screenshot_path else ''}
             <hr>
             <p style="color: #666; font-size: 12px;">
                 Check logs: <code>tail -50 logs/forerunner_claims.log</code>
@@ -145,7 +149,8 @@ def send_processing_failure_alert(email_type: str, claim_number: str, error_mess
         </html>
         """
 
-        notifier.send_email(alert_subject, body_html)
+        attachments = [screenshot_path] if screenshot_path else None
+        notifier.send_email(alert_subject, body_html, attachments=attachments)
         logging.getLogger(__name__).info(f"  ✓ Sent {email_type} failure alert email")
     except Exception as e:
         logging.getLogger(__name__).error(f"  ! Failed to send {email_type} failure alert: {e}")
@@ -444,7 +449,8 @@ def main():
                                                 check_amount=check_data.check_amount,
                                                 claim_number=check_data.claim_number,
                                                 error_message=result.error_message,
-                                                payer=check_data.payer
+                                                payer=check_data.payer,
+                                                screenshot_path=getattr(result, 'screenshot_path', None)
                                             )
                                             logger.info(f"  ✓ Sent check processing failure alert email")
                                         except Exception as e:
@@ -565,7 +571,8 @@ def main():
                                 failed_count += 1
                                 send_processing_failure_alert(
                                     "contract", client_data.claim_number or "N/A",
-                                    result.error_message, email_data.subject, email_data.sender
+                                    result.error_message, email_data.subject, email_data.sender,
+                                    screenshot_path=getattr(result, 'screenshot_path', None)
                                 )
 
                         else:
@@ -617,7 +624,8 @@ def main():
                                 failed_count += 1
                                 send_processing_failure_alert(
                                     "comment", email_data.claim_number,
-                                    result.error_message, email_data.subject, email_data.sender
+                                    result.error_message, email_data.subject, email_data.sender,
+                                    screenshot_path=getattr(result, 'screenshot_path', None)
                                 )
                                 if "not found" in (result.error_message or "").lower():
                                     send_claim_not_found_alert(

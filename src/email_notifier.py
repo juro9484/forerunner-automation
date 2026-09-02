@@ -7,7 +7,10 @@ import smtplib
 import logging
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from email.mime.image import MIMEImage
+from email.mime.application import MIMEApplication
 from datetime import datetime
+from pathlib import Path
 from typing import Optional, List
 
 
@@ -46,7 +49,8 @@ class EmailNotifier:
         self,
         subject: str,
         body_html: str,
-        body_text: Optional[str] = None
+        body_text: Optional[str] = None,
+        attachments: Optional[List[str]] = None
     ) -> bool:
         """
         Send an email notification to all recipients.
@@ -55,6 +59,7 @@ class EmailNotifier:
             subject: Email subject line
             body_html: HTML email body
             body_text: Plain text fallback (optional)
+            attachments: File paths to attach (optional); unreadable files are skipped
 
         Returns:
             True if sent successfully, False otherwise
@@ -64,19 +69,34 @@ class EmailNotifier:
             return False
 
         try:
-            # Create message
-            msg = MIMEMultipart('alternative')
+            # Create body (text + HTML alternatives)
+            body = MIMEMultipart('alternative')
+            if body_text:
+                body.attach(MIMEText(body_text, 'plain'))
+            body.attach(MIMEText(body_html, 'html'))
+
+            if attachments:
+                msg = MIMEMultipart('mixed')
+                msg.attach(body)
+                for file_path in attachments:
+                    try:
+                        path = Path(file_path)
+                        data = path.read_bytes()
+                        suffix = path.suffix.lower()
+                        if suffix in ('.png', '.jpg', '.jpeg'):
+                            part = MIMEImage(data, _subtype='png' if suffix == '.png' else 'jpeg')
+                        else:
+                            part = MIMEApplication(data)
+                        part.add_header('Content-Disposition', 'attachment', filename=path.name)
+                        msg.attach(part)
+                    except Exception as e:
+                        self.logger.warning(f"Could not attach {file_path}: {e}")
+            else:
+                msg = body
+
             msg['Subject'] = subject
             msg['From'] = self.from_email
             msg['To'] = ', '.join(self.to_emails)
-
-            # Add text and HTML parts
-            if body_text:
-                part1 = MIMEText(body_text, 'plain')
-                msg.attach(part1)
-
-            part2 = MIMEText(body_html, 'html')
-            msg.attach(part2)
 
             # Send email
             with smtplib.SMTP(self.smtp_server, self.smtp_port) as server:
@@ -327,7 +347,8 @@ Check metrics: cat logs/metrics.txt
         claim_number: str = None,
         confidence_score: int = None,
         error_message: str = None,
-        payer: str = None
+        payer: str = None,
+        screenshot_path: str = None
     ) -> bool:
         """
         Send alert email for check processing issues.
@@ -341,6 +362,7 @@ Check metrics: cat logs/metrics.txt
             confidence_score: Confidence score for low confidence alerts
             error_message: Error message for failed processing
             payer: Insurance company name (if extracted)
+            screenshot_path: Error screenshot to attach (optional)
 
         Returns:
             True if sent successfully
@@ -450,4 +472,5 @@ Action Required:
 PDF location: temp_attachments/{check_filename}
         """
 
-        return self.send_email(subject, body_html, body_text)
+        attachments = [screenshot_path] if screenshot_path else None
+        return self.send_email(subject, body_html, body_text, attachments=attachments)
