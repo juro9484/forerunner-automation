@@ -67,15 +67,54 @@ def ping_healthchecks(status: str = ""):
         logging.getLogger(__name__).warning(f"Failed to ping Healthchecks.io: {e}")
 
 
+FAILURE_ALERT_COOLDOWN_SECONDS = 3600
+
+
+def _failure_alert_throttled(error_message: str) -> bool:
+    """
+    Return True if this failure alert should be suppressed.
+
+    The service crash-restarts continuously on a persistent failure (e.g. bad
+    CRM credentials), which sent an alert every ~45s during the Sep 2026
+    login-failure incident. Throttle state lives on disk so it survives
+    restarts. A different error message always alerts immediately.
+    """
+    import json
+    import time
+
+    throttle_file = Config.LOGS_DIR / "failure_alert_throttle.json"
+    error_key = (error_message or "")[:200]
+
+    try:
+        state = json.loads(throttle_file.read_text())
+        if (state.get("error") == error_key
+                and time.time() - state.get("ts", 0) < FAILURE_ALERT_COOLDOWN_SECONDS):
+            logging.getLogger(__name__).info(
+                "Suppressing duplicate failure alert (same error within cooldown)")
+            return True
+    except Exception:
+        pass
+
+    try:
+        throttle_file.write_text(json.dumps({"error": error_key, "ts": time.time()}))
+    except Exception as e:
+        logging.getLogger(__name__).warning(f"Could not write alert throttle state: {e}")
+    return False
+
+
 def send_failure_notification(error_message: str, error_details: str = None):
     """
     Send email notification about service failure.
+    Repeated identical failures alert at most once per hour.
 
     Args:
         error_message: Brief error description
         error_details: Full error traceback
     """
     if not Config.NOTIFICATIONS_ENABLED:
+        return
+
+    if _failure_alert_throttled(error_message):
         return
 
     try:
